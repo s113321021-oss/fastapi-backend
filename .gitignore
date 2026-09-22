@@ -1,6 +1,79 @@
-venv/
-.venv/
+// ...existing code...
+# Python bytecode / cache
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+.env/
+.venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# Environment variables
 .env
+.env.*
+!.env.example
+
+# IDE / editor settings
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Testing / coverage
 .pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+pytest_session.txt
+.cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Logs
+*.log
+logs/
+log/
+
+# Local database / runtime files
+*.sqlite3
+*.db
+*.db-journal
+*.pid
+tmp/
+temp/
+
+# Uploads / generated files
+uploads/
+media/
+staticfiles/
