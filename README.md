@@ -90,22 +90,35 @@ cp .env.example .env
 範例內容：
 
 ```env
-APP_NAME=fastapi-backend
-DEBUG=True
-SECRET_KEY=your-secret-key
-DATABASE_URL=sqlite:///./app.db
+DATABASE_URL=postgresql://dev_user:dev_password@localhost:5432/fastapi_dev
+ROOT_PATH=/s113321021
 ```
+
+若你在反向代理底下部署，請讓 `ROOT_PATH` 與實際網址前綴完全一致。
 
 ### 4. 啟動開發伺服器
 
+本機開發：
+
 ```bash
-uvicorn app.main:app --reload
+uvicorn app.main:app --host 0.0.0.0 --port 7777 --reload
+```
+
+帶前綴部署：
+
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 7777 --root-path /s113321021 --reload
 ```
 
 啟動後，預設 API 文件可在以下位置查看：
 
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
+- Swagger UI: http://localhost:7777/docs
+- ReDoc: http://localhost:7777/redoc
+
+若使用反向代理，請務必保持路徑前綴與 `ROOT_PATH` 一致，例如：
+
+- https://demo.wke.csie.ncnu.edu.tw/s113321021/docs
+- https://demo.wke.csie.ncnu.edu.tw/s113321021/openapi.json
 
 ## 常用命令
 

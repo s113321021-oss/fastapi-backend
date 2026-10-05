@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FastAPI Web App + API</title>
+    <link rel="stylesheet" href="/s113321021/static/assets/css/style.css" />
+  </head>
+  <body>
+    <div class="container">
+      <h1>FastAPI Web App + API Demo</h1>
+
+      <div class="card">
+        <h2>API 狀態</h2>
+        <button id="healthBtn">檢查 /api/health</button>
+        <div id="healthResult" class="message"></div>
+      </div>
+
+      <div class="card">
+        <h2>新增筆記</h2>
+        <form id="noteForm">
+          <input id="title" type="text" placeholder="標題" required />
+          <textarea id="content" rows="4" placeholder="內容" required></textarea>
+          <button type="submit">新增筆記</button>
+        </form>
+        <div id="noteMessage" class="message"></div>
+      </div>
+
+      <div class="card">
+        <h2>筆記列表</h2>
+        <button id="loadBtn">載入筆記</button>
+        <ul id="notesList"></ul>
+      </div>
+    </div>
+
+    <script src="/s113321021/static/assets/js/app.js"></script>
+  </body>
+</html>
