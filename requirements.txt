@@ -17,3 +17,6 @@ uvicorn==0.52.4
 watchfiles==1.2.0
 websockets==17.1
 psycopg[binary]
+argon2-cffi
+httpx
+beautifulsoup4

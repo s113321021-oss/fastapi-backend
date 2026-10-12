@@ -1,15 +1,18 @@
 import os
+import json
 from datetime import datetime
 from pathlib import Path
 
-import psycopg
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.requests import Request
+
+from app.api.auth import router as auth_router
+from app.api.user_access import initialize_access_tables, router as user_access_router
+from app.core.db import get_db_connection
 
 load_dotenv()
 
@@ -38,6 +41,8 @@ app = FastAPI(
     openapi_url="/openapi.json",
     root_path_in_servers=True,
 )
+app.include_router(user_access_router)
+app.include_router(auth_router)
 
 
 @app.middleware("http")
@@ -53,13 +58,19 @@ async def proxy_prefix_middleware(request: Request, call_next):
 
     return await call_next(request)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+cors_origins = [
+    origin
+    for origin in json.loads(os.getenv("CORS_ORIGINS", "[]"))
+    if origin != "*"
+]
+if cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_origins,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "DELETE"],
+        allow_headers=["Content-Type"],
+    )
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
@@ -97,13 +108,6 @@ class Note(NoteCreate):
     created_at: datetime | None = None
 
 
-def get_db_connection():
-    database_url = os.getenv("DATABASE_URL")
-    if not database_url:
-        raise RuntimeError("DATABASE_URL is not set.")
-    return psycopg.connect(database_url)
-
-
 @app.on_event("startup")
 def init_db():
     database_url = os.getenv("DATABASE_URL")
@@ -122,6 +126,7 @@ def init_db():
                 )
                 """
             )
+            initialize_access_tables(conn)
             conn.commit()
 
 

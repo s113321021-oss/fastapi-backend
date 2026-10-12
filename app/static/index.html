@@ -3,36 +3,326 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>FastAPI Web App + API</title>
-    <link rel="stylesheet" href="/s113321021/static/assets/css/style.css" />
+    <meta name="referrer" content="no-referrer" />
+    <meta
+      name="description"
+      content="探索校園講座、工作坊、社團與各式精彩活動，輕鬆找到下一個校園回憶。"
+    />
+    <meta name="theme-color" content="#f7f8fc" />
+    <title>拾光校園｜活動報名系統</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="static/assets/css/style.css?v=4" />
   </head>
   <body>
-    <div class="container">
-      <h1>FastAPI Web App + API Demo</h1>
-
-      <div class="card">
-        <h2>API 狀態</h2>
-        <button id="healthBtn">檢查 /api/health</button>
-        <div id="healthResult" class="message"></div>
+    <header class="site-header">
+      <a class="brand" href="#" aria-label="拾光校園首頁">
+        <span class="brand-mark" aria-hidden="true">拾</span>
+        <span class="brand-copy">
+          <strong>拾光校園</strong>
+          <small>校園活動報名系統</small>
+        </span>
+      </a>
+      <div class="header-actions">
+        <span class="header-note">讓每個相遇，都成為校園回憶</span>
+        <button class="button button-primary login-button" type="button" data-open-login>
+          <svg aria-hidden="true" viewBox="0 0 20 20">
+            <path d="M10 10a3.25 3.25 0 1 0 0-6.5A3.25 3.25 0 0 0 10 10Zm-6 6.25a6 6 0 0 1 12 0v.5H4v-.5Z" />
+          </svg>
+          登入
+        </button>
+        <button class="button button-outline logout-button" id="logoutButton" type="button" hidden>
+          登出
+        </button>
       </div>
+    </header>
 
-      <div class="card">
-        <h2>新增筆記</h2>
-        <form id="noteForm">
-          <input id="title" type="text" placeholder="標題" required />
-          <textarea id="content" rows="4" placeholder="內容" required></textarea>
-          <button type="submit">新增筆記</button>
-        </form>
-        <div id="noteMessage" class="message"></div>
-      </div>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="活動導覽">
+        <p class="sidebar-heading">探索校園</p>
+        <nav class="side-nav">
+          <button class="nav-link is-active" type="button" data-category="all" aria-current="page">
+            <span class="nav-icon" aria-hidden="true">⌂</span>
+            <span>活動總覽</span>
+          </button>
+          <button class="nav-link" type="button" data-category="talk">
+            <span class="nav-icon" aria-hidden="true">◉</span>
+            <span>講座分享</span>
+          </button>
+          <button class="nav-link" type="button" data-category="workshop">
+            <span class="nav-icon" aria-hidden="true">✳</span>
+            <span>工作坊</span>
+          </button>
+          <button class="nav-link" type="button" data-category="club">
+            <span class="nav-icon" aria-hidden="true">♡</span>
+            <span>社團活動</span>
+          </button>
+          <button class="nav-link" type="button" data-category="culture">
+            <span class="nav-icon" aria-hidden="true">♫</span>
+            <span>藝文展演</span>
+          </button>
+          <span class="nav-divider" aria-hidden="true"></span>
+          <button class="nav-link nav-link-muted" type="button" data-open-login>
+            <span class="nav-icon" aria-hidden="true">▤</span>
+            <span>我的報名</span>
+          </button>
+          <button class="nav-link" id="adminNav" type="button" data-open-admin hidden>
+            <span class="nav-icon" aria-hidden="true">⚙</span>
+            <span>活動管理</span>
+          </button>
+        </nav>
+        <div class="sidebar-note">
+          <span class="sidebar-note-icon" aria-hidden="true">✦</span>
+          <p>每一場活動，都是認識新朋友的開始。</p>
+        </div>
+      </aside>
 
-      <div class="card">
-        <h2>筆記列表</h2>
-        <button id="loadBtn">載入筆記</button>
-        <ul id="notesList"></ul>
-      </div>
+      <main class="main-content">
+        <section class="welcome-banner" aria-labelledby="welcome-title">
+          <div class="welcome-copy">
+            <span class="eyebrow"><span class="eyebrow-dot"></span> CAMPUS LIFE, YOUR WAY</span>
+            <h1 id="welcome-title">把校園生活，<br class="mobile-break" />排進行事曆。</h1>
+            <p>從一場講座、一個工作坊開始，遇見課堂之外的精彩。</p>
+            <a class="welcome-link" href="#activities">
+              發現下一場活動 <span aria-hidden="true">↗</span>
+            </a>
+          </div>
+          <div class="welcome-art" aria-hidden="true">
+            <span class="art-sparkle sparkle-one">✳</span>
+            <span class="art-sparkle sparkle-two">✦</span>
+            <div class="art-sun"></div>
+            <div class="art-card art-card-back"></div>
+            <div class="art-card art-card-front">
+              <span class="art-calendar">10<br /><small>月</small></span>
+              <span class="art-card-lines"><i></i><i></i><i></i></span>
+            </div>
+            <div class="art-orbit"></div>
+          </div>
+        </section>
+
+        <section class="activities-section" id="activities" aria-labelledby="activities-title">
+          <div class="section-heading">
+            <div>
+              <span class="section-kicker">FIND YOUR MOMENT</span>
+              <h2 id="activities-title">近期活動</h2>
+              <p class="section-subtitle">好活動不等人，看看最近校園裡有什麼新鮮事。</p>
+            </div>
+            <label class="search-box">
+              <svg aria-hidden="true" viewBox="0 0 20 20">
+                <circle cx="8.8" cy="8.8" r="5.8"></circle>
+                <path d="m13.2 13.2 4 4"></path>
+              </svg>
+              <span class="visually-hidden">搜尋活動</span>
+              <input id="activitySearch" type="search" placeholder="搜尋活動或關鍵字" autocomplete="off" />
+              <kbd>/</kbd>
+            </label>
+          </div>
+
+          <div class="filter-row" id="categoryFilters" aria-label="活動分類">
+            <button class="filter-chip is-selected" type="button" data-category="all" aria-pressed="true">全部活動</button>
+          </div>
+
+          <div class="results-line">
+            <p id="resultsCount" aria-live="polite">正在載入活動...</p>
+            <span class="sort-label">依活動日期排序 <span aria-hidden="true">↓</span></span>
+          </div>
+
+          <div class="activity-grid" id="activityGrid" aria-live="polite"></div>
+          <div class="empty-state" id="emptyState" hidden>
+            <span aria-hidden="true">✦</span>
+            <h3>沒有找到符合的活動</h3>
+            <p>換個關鍵字或切換分類，再探索看看吧。</p>
+            <button class="button button-outline" type="button" id="resetFilters">清除篩選</button>
+          </div>
+          <div class="load-error" id="loadError" role="alert" hidden>
+            <strong>活動資料暫時無法載入</strong>
+            <p>請稍後重試，或確認活動資料檔案是否存在。</p>
+            <button class="button button-outline" type="button" id="retryLoad">重新載入</button>
+          </div>
+        </section>
+
+        <section class="admin-panel" id="adminPanel" aria-labelledby="admin-title" hidden>
+          <div class="section-heading admin-heading">
+            <div>
+              <span class="section-kicker">EVENT WORKSPACE</span>
+              <h2 id="admin-title">活動管理</h2>
+              <p class="section-subtitle">建立草稿、編輯內容、審核並發布活動。</p>
+            </div>
+            <label class="admin-filter">
+              <span>狀態</span>
+              <select id="adminStatusFilter">
+                <option value="">全部</option>
+                <option value="draft">草稿</option>
+                <option value="approved">已核准</option>
+                <option value="rejected">已拒絕</option>
+                <option value="published">已發布</option>
+              </select>
+            </label>
+          </div>
+          <p id="adminMessage" class="admin-message" role="status" aria-live="polite"></p>
+          <section class="activity-import-panel" aria-labelledby="activityImportTitle">
+            <div class="activity-import-heading">
+              <div>
+                <h3 id="activityImportTitle">官方公告匯入</h3>
+                <p>同步暨大公開公告；解析結果會先留在待審清單，不會直接發布。</p>
+              </div>
+              <div class="activity-import-controls">
+                <label for="activityImportSource">來源</label>
+                <select id="activityImportSource">
+                  <option value="">全部來源</option>
+                </select>
+                <button class="button button-outline" id="syncActivityImports" type="button">
+                  同步公告
+                </button>
+              </div>
+            </div>
+            <p class="activity-import-message" id="activityImportMessage" role="status" aria-live="polite"></p>
+            <div class="activity-import-runs" id="activityImportRuns" aria-live="polite"></div>
+            <div class="activity-import-list" id="activityImportList" aria-live="polite">
+              <p class="admin-empty">尚未同步公告。</p>
+            </div>
+          </section>
+          <div class="admin-layout">
+            <form class="admin-form" id="activityForm">
+              <h3 id="activityFormTitle">建立草稿活動</h3>
+              <label>
+                活動名稱
+                <input name="title" maxlength="255" required />
+              </label>
+              <div class="form-row">
+                <label>
+                  活動分類
+                  <select name="category" required>
+                    <option value="talk">講座分享</option>
+                    <option value="workshop">工作坊</option>
+                    <option value="club">社團活動</option>
+                    <option value="culture">藝文展演</option>
+                    <option value="sports">運動休閒</option>
+                    <option value="career">職涯成長</option>
+                    <option value="other">其他活動</option>
+                  </select>
+                </label>
+                <label>
+                  主辦單位
+                  <input name="organizer" maxlength="255" required />
+                </label>
+              </div>
+              <div class="form-row">
+                <label>
+                  活動時間
+                  <input name="starts_at" type="datetime-local" required />
+                </label>
+                <label>
+                  報名截止時間
+                  <input name="registration_deadline" type="datetime-local" required />
+                </label>
+              </div>
+              <div class="form-row">
+                <label>
+                  活動地點
+                  <input name="location" maxlength="255" required />
+                </label>
+                <label>
+                  最大名額
+                  <input name="capacity" type="number" min="1" max="100000" required />
+                </label>
+              </div>
+              <label>
+                活動時長
+                <input name="duration" maxlength="100" placeholder="例如：約 90 分鐘" />
+              </label>
+              <label>
+                活動描述
+                <textarea name="description" rows="4" maxlength="10000" required></textarea>
+              </label>
+              <label>
+                活動來源（選填）
+                <select name="source_url" id="activitySourceSelect">
+                  <option value="">無</option>
+                </select>
+              </label>
+              <div class="admin-form-actions">
+                <button class="button button-primary" type="submit" id="saveActivityButton">儲存草稿</button>
+                <button class="button button-outline" type="button" id="cancelEditButton" hidden>取消編輯</button>
+              </div>
+            </form>
+            <div class="admin-activity-list" id="adminActivityList" aria-live="polite"></div>
+          </div>
+        </section>
+
+        <section class="sources-section" aria-labelledby="sources-title">
+          <div>
+            <span class="section-kicker">CAMPUS EVENT SOURCES</span>
+            <h2 id="sources-title">活動資訊來源</h2>
+          </div>
+          <div class="source-links" id="activitySources">
+            <span>正在載入活動來源...</span>
+          </div>
+        </section>
+
+        <footer class="site-footer">
+          <span>拾光校園 · 讓參與成為日常</span>
+          <span>一起收集，屬於你的校園時刻。</span>
+        </footer>
+      </main>
     </div>
 
-    <script src="/s113321021/static/assets/js/app.js"></script>
+    <dialog class="modal" id="activityDialog" aria-labelledby="activityDialogTitle">
+      <button class="modal-close" type="button" data-close-dialog aria-label="關閉活動詳情">×</button>
+      <div class="modal-content" id="activityDialogContent"></div>
+    </dialog>
+    <dialog class="modal login-modal" id="loginDialog" aria-labelledby="loginDialogTitle">
+      <button class="modal-close" type="button" data-close-dialog aria-label="關閉登入視窗">×</button>
+      <div class="login-modal-mark" aria-hidden="true">拾</div>
+      <span class="section-kicker">WELCOME BACK</span>
+      <h2 id="loginDialogTitle">登入拾光校園</h2>
+      <p id="loginDescription">使用註冊時設定的信箱與密碼登入。</p>
+      <form class="account-form" id="accountForm">
+        <label for="loginEmail">校內學生信箱</label>
+        <input
+          id="loginEmail"
+          name="email"
+          type="email"
+          placeholder="s學號@ncnu.edu.tw"
+          pattern="s[0-9]+@ncnu\.edu\.tw"
+          autocomplete="email"
+          maxlength="320"
+          required
+        />
+        <label id="displayNameLabel" for="displayName" hidden>姓名</label>
+        <input
+          id="displayName"
+          name="display_name"
+          type="text"
+          placeholder="姓名"
+          autocomplete="name"
+          maxlength="255"
+          hidden
+        />
+        <label for="loginPassword">密碼</label>
+        <input
+          id="loginPassword"
+          name="password"
+          type="password"
+          autocomplete="current-password"
+          minlength="12"
+          maxlength="128"
+          required
+        />
+        <button class="button button-primary sso-button" id="accountSubmitButton" type="submit">
+          登入
+        </button>
+      </form>
+      <button class="auth-mode-toggle" id="authModeToggle" type="button">建立學生帳號</button>
+      <p class="login-hint" id="loginMessage" role="status" aria-live="polite">
+        密碼至少 12 個字元；系統不會使用你的 SSO 密碼。
+      </p>
+    </dialog>
+
+    <script src="static/assets/js/app.js?v=6" defer></script>
   </body>
 </html>
