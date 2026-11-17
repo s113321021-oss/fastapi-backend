@@ -49,6 +49,10 @@ Thumbs.db
 
 # Testing / coverage
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyright/
+.hypothesis/
 .coverage
 .coverage.*
 htmlcov/

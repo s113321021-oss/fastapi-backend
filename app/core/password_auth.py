@@ -7,18 +7,13 @@ from urllib.parse import urlsplit
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
 from fastapi import HTTPException, Request
-from pydantic import BaseModel
-
 from app.core.db import get_db_connection
+from app.models.main import AuthenticatedIdentity
 
 SESSION_COOKIE_NAME = "campus_session"
 SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 14
 password_hasher = PasswordHasher()
 DUMMY_PASSWORD_HASH = password_hasher.hash("invalid-account-password-check")
-
-
-class AuthenticatedIdentity(BaseModel):
-    email: str
 
 
 def normalize_email(email: str) -> str:

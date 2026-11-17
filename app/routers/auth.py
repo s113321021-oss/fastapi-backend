@@ -1,6 +1,5 @@
 import psycopg
 from fastapi import APIRouter, HTTPException, Request, Response
-from pydantic import BaseModel, Field
 
 from app.core.db import get_db_connection
 from app.core.password_auth import (
@@ -16,27 +15,9 @@ from app.core.password_auth import (
     session_cookie_options,
     verify_password,
 )
+from app.models.main import AccountRegistration, PasswordLogin
 
 router = APIRouter(prefix="/api/auth", tags=["authentication"])
-
-
-class AccountRegistration(BaseModel):
-    email: str = Field(
-        min_length=3,
-        max_length=320,
-        pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$",
-    )
-    display_name: str = Field(min_length=1, max_length=255)
-    password: str = Field(min_length=12, max_length=128)
-
-
-class PasswordLogin(BaseModel):
-    email: str = Field(
-        min_length=3,
-        max_length=320,
-        pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$",
-    )
-    password: str = Field(min_length=1, max_length=128)
 
 
 def _request_is_limited(email: str, client_ip: str) -> bool:
@@ -178,4 +159,5 @@ def logout(request: Request, response: Response) -> Response:
                 conn.commit()
     response.delete_cookie(**session_cookie_options(request))
     response.headers["Cache-Control"] = "no-store"
+    response.status_code = 204
     return response

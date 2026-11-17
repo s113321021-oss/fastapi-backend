@@ -16,7 +16,7 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="static/assets/css/style.css?v=4" />
+    <link rel="stylesheet" href="static/assets/css/style.css?v=8" />
   </head>
   <body>
     <header class="site-header">
@@ -65,10 +65,22 @@
             <span class="nav-icon" aria-hidden="true">♫</span>
             <span>藝文展演</span>
           </button>
+          <button class="nav-link" type="button" data-category="sports">
+            <span class="nav-icon" aria-hidden="true">⚽</span>
+            <span>運動休閒</span>
+          </button>
+          <button class="nav-link" type="button" data-category="career">
+            <span class="nav-icon" aria-hidden="true">✎</span>
+            <span>職涯成長</span>
+          </button>
           <span class="nav-divider" aria-hidden="true"></span>
-          <button class="nav-link nav-link-muted" type="button" data-open-login>
+          <button class="nav-link nav-link-muted" id="myRegistrationsNav" type="button" hidden>
             <span class="nav-icon" aria-hidden="true">▤</span>
             <span>我的報名</span>
+          </button>
+          <button class="nav-link" id="checkInNav" type="button" hidden>
+            <span class="nav-icon" aria-hidden="true">✓</span>
+            <span>現場簽到</span>
           </button>
           <button class="nav-link" id="adminNav" type="button" data-open-admin hidden>
             <span class="nav-icon" aria-hidden="true">⚙</span>
@@ -145,6 +157,59 @@
           </div>
         </section>
 
+        <section class="my-registrations-section" id="myRegistrationsSection" aria-labelledby="myRegistrationsTitle" hidden>
+          <div class="section-heading">
+            <div>
+              <span class="section-kicker">YOUR CAMPUS MOMENTS</span>
+              <h2 id="myRegistrationsTitle">我的報名</h2>
+              <p class="section-subtitle">查看已報名活動與現場簽到狀態。</p>
+            </div>
+          </div>
+          <p class="my-registration-message" id="myRegistrationMessage" role="status" aria-live="polite"></p>
+          <div class="my-registration-list" id="myRegistrationList" aria-live="polite"></div>
+        </section>
+
+        <section class="check-in-panel" id="checkInPanel" aria-labelledby="checkInTitle" hidden>
+          <div class="section-heading check-in-heading">
+            <div>
+              <span class="section-kicker">ON-SITE ATTENDANCE</span>
+              <h2 id="checkInTitle">現場簽到</h2>
+              <p class="section-subtitle">核對本人與校園照片證件後，再確認簽到。</p>
+            </div>
+            <label class="check-in-activity-select" for="checkInActivitySelect">
+              活動
+              <select id="checkInActivitySelect">
+                <option value="">請選擇活動</option>
+              </select>
+            </label>
+          </div>
+          <div class="check-in-tools">
+            <form class="check-in-search" id="checkInSearchForm">
+              <label for="checkInSearchInput">搜尋學生或報名編號</label>
+              <div class="check-in-input-row">
+                <input id="checkInSearchInput" type="search" maxlength="255" placeholder="姓名、校內信箱或 Registration ID" />
+                <button class="button button-primary" id="checkInSearchButton" type="submit">搜尋</button>
+              </div>
+            </form>
+            <div class="check-in-scanner-controls">
+              <button class="button button-outline" id="startQrScannerButton" type="button">啟動相機掃碼</button>
+              <button class="button button-outline" id="stopQrScannerButton" type="button" hidden>停止相機</button>
+              <video class="check-in-video" id="checkInVideo" playsinline muted hidden></video>
+              <form class="check-in-token-form" id="checkInTokenForm">
+                <label for="checkInQrToken">相機不可用時，貼上 QR token</label>
+                <div class="check-in-input-row">
+                  <input id="checkInQrToken" type="text" minlength="43" maxlength="43" pattern="[A-Za-z0-9_-]{43}" autocomplete="off" />
+                  <button class="button button-outline" type="submit">查詢 QR</button>
+                </div>
+              </form>
+            </div>
+          </div>
+          <p class="check-in-message" id="checkInMessage" role="status" aria-live="polite"></p>
+          <div class="check-in-results" id="checkInResults" aria-live="polite">
+            <p class="admin-empty">選擇活動後搜尋學生，或掃描報名 QR Code。</p>
+          </div>
+        </section>
+
         <section class="admin-panel" id="adminPanel" aria-labelledby="admin-title" hidden>
           <div class="section-heading admin-heading">
             <div>
@@ -164,26 +229,28 @@
             </label>
           </div>
           <p id="adminMessage" class="admin-message" role="status" aria-live="polite"></p>
-          <section class="activity-import-panel" aria-labelledby="activityImportTitle">
-            <div class="activity-import-heading">
+          <section class="activity-statistics-panel" aria-labelledby="activityStatisticsTitle">
+            <div class="activity-statistics-heading">
               <div>
-                <h3 id="activityImportTitle">官方公告匯入</h3>
-                <p>同步暨大公開公告；解析結果會先留在待審清單，不會直接發布。</p>
+                <span class="section-kicker">EVENT PERFORMANCE</span>
+                <h3 id="activityStatisticsTitle">活動成效與簽到率</h3>
               </div>
-              <div class="activity-import-controls">
-                <label for="activityImportSource">來源</label>
-                <select id="activityImportSource">
-                  <option value="">全部來源</option>
+              <label for="statisticsActivitySelect">
+                活動
+                <select id="statisticsActivitySelect">
+                  <option value="">載入活動統計...</option>
                 </select>
-                <button class="button button-outline" id="syncActivityImports" type="button">
-                  同步公告
-                </button>
-              </div>
+              </label>
             </div>
-            <p class="activity-import-message" id="activityImportMessage" role="status" aria-live="polite"></p>
-            <div class="activity-import-runs" id="activityImportRuns" aria-live="polite"></div>
-            <div class="activity-import-list" id="activityImportList" aria-live="polite">
-              <p class="admin-empty">尚未同步公告。</p>
+            <p class="activity-statistics-message" id="activityStatisticsMessage" role="status" aria-live="polite"></p>
+            <div class="activity-statistics-content" id="activityStatisticsContent" hidden>
+              <div class="activity-statistics-metrics" id="activityStatisticsMetrics"></div>
+              <div class="attendance-chart-layout">
+                <div class="attendance-pie" id="attendancePie" role="img" aria-label="簽到狀態圓餅圖">
+                  <span id="attendancePieRate">0%</span>
+                </div>
+                <div class="attendance-legend" id="attendanceLegend"></div>
+              </div>
             </div>
           </section>
           <div class="admin-layout">
@@ -211,14 +278,22 @@
                   <input name="organizer" maxlength="255" required />
                 </label>
               </div>
-              <div class="form-row">
+              <div class="form-row datetime-form-row">
                 <label>
                   活動時間
-                  <input name="starts_at" type="datetime-local" required />
+                  <span class="datetime-range">
+                    <input name="starts_at" type="datetime-local" aria-label="活動開始時間" required />
+                    <span aria-hidden="true">至</span>
+                    <input name="ends_at" type="datetime-local" aria-label="活動結束時間" required />
+                  </span>
                 </label>
                 <label>
-                  報名截止時間
-                  <input name="registration_deadline" type="datetime-local" required />
+                  報名時間
+                  <span class="datetime-range">
+                    <input name="registration_opens_at" type="datetime-local" aria-label="報名開始時間" required />
+                    <span aria-hidden="true">至</span>
+                    <input name="registration_deadline" type="datetime-local" aria-label="報名截止時間" required />
+                  </span>
                 </label>
               </div>
               <div class="form-row">
@@ -232,18 +307,8 @@
                 </label>
               </div>
               <label>
-                活動時長
-                <input name="duration" maxlength="100" placeholder="例如：約 90 分鐘" />
-              </label>
-              <label>
                 活動描述
                 <textarea name="description" rows="4" maxlength="10000" required></textarea>
-              </label>
-              <label>
-                活動來源（選填）
-                <select name="source_url" id="activitySourceSelect">
-                  <option value="">無</option>
-                </select>
               </label>
               <div class="admin-form-actions">
                 <button class="button button-primary" type="submit" id="saveActivityButton">儲存草稿</button>
@@ -251,16 +316,6 @@
               </div>
             </form>
             <div class="admin-activity-list" id="adminActivityList" aria-live="polite"></div>
-          </div>
-        </section>
-
-        <section class="sources-section" aria-labelledby="sources-title">
-          <div>
-            <span class="section-kicker">CAMPUS EVENT SOURCES</span>
-            <h2 id="sources-title">活動資訊來源</h2>
-          </div>
-          <div class="source-links" id="activitySources">
-            <span>正在載入活動來源...</span>
           </div>
         </section>
 
@@ -275,6 +330,14 @@
       <button class="modal-close" type="button" data-close-dialog aria-label="關閉活動詳情">×</button>
       <div class="modal-content" id="activityDialogContent"></div>
     </dialog>
+    <dialog class="modal registration-qr-dialog" id="registrationQrDialog" aria-labelledby="registrationQrTitle">
+      <button class="modal-close" type="button" data-close-dialog aria-label="關閉 QR Code">×</button>
+      <span class="section-kicker">EVENT CHECK-IN</span>
+      <h2 id="registrationQrTitle">活動報名 QR Code</h2>
+      <p id="registrationQrMessage" class="registration-qr-message" role="status" aria-live="polite"></p>
+      <img id="registrationQrImage" class="registration-qr-image" alt="此活動的專屬報名 QR Code" hidden />
+      <p class="registration-qr-note">請於活動現場出示此碼，並配合工作人員核對本人身分。</p>
+    </dialog>
     <dialog class="modal login-modal" id="loginDialog" aria-labelledby="loginDialogTitle">
       <button class="modal-close" type="button" data-close-dialog aria-label="關閉登入視窗">×</button>
       <div class="login-modal-mark" aria-hidden="true">拾</div>
@@ -282,13 +345,12 @@
       <h2 id="loginDialogTitle">登入拾光校園</h2>
       <p id="loginDescription">使用註冊時設定的信箱與密碼登入。</p>
       <form class="account-form" id="accountForm">
-        <label for="loginEmail">校內學生信箱</label>
+        <label for="loginEmail">信箱</label>
         <input
           id="loginEmail"
           name="email"
           type="email"
-          placeholder="s學號@ncnu.edu.tw"
-          pattern="s[0-9]+@ncnu\.edu\.tw"
+          placeholder="name@example.edu.tw"
           autocomplete="email"
           maxlength="320"
           required
@@ -323,6 +385,6 @@
       </p>
     </dialog>
 
-    <script src="static/assets/js/app.js?v=6" defer></script>
+    <script src="static/assets/js/app.js?v=12" defer></script>
   </body>
 </html>

@@ -1,6 +1,6 @@
-# FastAPI Backend
+# 校園活動管理系統
 
-這是一個基於 FastAPI 的後端專案，結構清楚，適合用來作為 API 服務的基礎模板。
+本專案提供校園活動瀏覽、學生註冊與登入、活動審核發布、活動報名及現場 QR Code 簽到功能，並附有響應式網頁介面。
 
 ## 專案簡介
 
@@ -8,22 +8,18 @@
 
 - app
   - 應用程式入口
-- api
+- routers
   - API 路由與端點
 - core
-  - 核心配置、設定檔、共用邏輯
+  - 資料庫連線、資料表初始化與共用邏輯
 - models
-  - 資料模型 / 資料庫模型
+  - Pydantic 請求／回應模型與列舉定義
 
 ## 校園活動首頁
 
 首頁採 mobile-first 響應式版面，包含活動導覽、分類篩選、關鍵字搜尋、活動卡片與詳情視窗。活動由資料庫 API 提供；學生及未登入訪客只能讀取已發布活動，管理員登入後可在首頁使用活動管理區。`app/static/data/activities.json` 僅保留為舊版展示資料，不會作為公開活動資料來源。
 
-活動支援分類、主辦單位、活動時間/時長、地點、描述、報名截止、最大名額及來源連結。來源連結限定為下列暨大官方網站；管理員可手動同步公告，解析結果先進入待檢視清單，不會直接公開：
-
-- [終身學習與地方創生中心](https://ccweb.ncnu.edu.tw/SLLL/z958B653E5831540D4E4B6D3B52D5660E7D30list.asp)
-- [語言教學中心](https://ltrc.ncnu.edu.tw/web/quiz/quiz_sign.jsp)
-- [教學發展中心](https://ctld.ncnu.edu.tw/)
+活動支援分類、主辦單位、活動起訖時間、報名起訖時間、地點、描述及最大名額。活動資料由管理員手動建立與維護。
 
 ## 使用者與權限 API
 
@@ -35,7 +31,7 @@
 .\venv\Scripts\python.exe -c "from getpass import getpass; from app.core.password_auth import hash_password; print(hash_password(getpass('Initial password: ')))"
 ```
 
-把輸出的 Argon2id 雜湊填入下方 SQL。管理員登入後可用 `POST /api/admin/users` 建立或更新帳號及角色，新增帳號時需提供至少 12 字元的初始密碼。應用程式啟動時會初始化使用者、活動、報名與 session 資料表。
+把輸出的 Argon2id 雜湊填入下方 SQL。管理員登入後可用 `POST /api/admin/users` 建立或更新帳號及角色，新增帳號時需提供至少 12 字元的初始密碼。學生忘記密碼時，目前沒有自助重設或重設郵件功能，請聯絡系統管理員，透過此 API 為帳號設定新密碼。應用程式啟動時會初始化使用者、活動、報名與 session 資料表。
 
 初始管理員資料列範例（替換信箱與產生的 Argon2id 雜湊）：
 
@@ -56,18 +52,21 @@ DO UPDATE SET display_name = EXCLUDED.display_name,
 | 信箱/密碼登入 | `POST /api/auth/login` |
 | 查看登入使用者 | `GET /api/auth/me` |
 | 登出並撤銷 session | `POST /api/auth/logout` |
-| 查看活動來源 | `GET /api/activity-sources` |
-| 管理員同步官方公告 | `POST /api/admin/activity-imports/sync`，body 可帶 `source_id` (`slll`/`ltrc`/`ctld`)，省略時同步全部來源 |
-| 管理員查看匯入結果與同步歷史 | `GET /api/admin/activity-imports`、`GET /api/admin/activity-import-runs` |
-| 建立活動草稿或忽略公告 | `POST /api/admin/activity-imports/{import_id}/create-draft`、`POST /api/admin/activity-imports/{import_id}/ignore` |
 | 瀏覽已發布活動 | `GET /api/activities`、`GET /api/activities/{activity_id}` |
 | 學生報名及查看自己的紀錄 | `POST /api/activities/{activity_id}/registrations`、`GET /api/registrations/me` |
+| 學生查看單筆專屬 QR Code | `GET /api/registrations/me/{registration_id}/qr`（回傳 SVG） |
 | 管理使用者、建立/編輯/廢棄草稿、審核/發布活動、查看統計 | `/api/admin/...` |
-| 查詢報名及確認簽到 | `GET /api/check-in/registrations`、`POST /api/check-in/registrations/{registration_id}/confirm` |
+| 管理員/簽到人員搜尋報名（姓名、信箱或 Registration ID） | `GET /api/check-in/registrations?activity_id={id}&search={query}` |
+| 管理員/簽到人員以 QR token 查詢 | `POST /api/check-in/qr/lookup`，body 包含 `token` 與 `activity_id` |
+| 管理員/簽到人員核對後確認簽到 | `POST /api/check-in/registrations/{registration_id}/confirm` |
+| 管理員查看報名、簽到、未簽到、剩餘名額與簽到率 | `GET /api/admin/activities/statistics` |
+| 簽到人員以 QR token 查詢報名 | `POST /api/check-in/qr/lookup` |
 
 活動狀態流程為「草稿 → 核准 → 發布」；已拒絕的活動可編輯後重新送審或廢棄。任何未發布活動皆可編輯或廢棄，編輯會將狀態重設為草稿並清除舊審核意見；發布後不可透過管理 API 直接修改。拒絕時必須提供審核意見；公開列表、詳情及報名只會使用已發布活動。報名會同時檢查截止時間、名額與重複報名。
 
-公告同步使用固定 HTTPS allowlist，只抓取 `ccweb.ncnu.edu.tw`、`ltrc.ncnu.edu.tw`、`ctld.ncnu.edu.tw`，不接受任意 URL、不跟隨外站轉址，且限制回應大小。每次同步由管理員手動觸發；系統依來源公告網址去重，保存匯入候選、最後抓取時間、解析缺漏/錯誤及每次同步結果。缺少活動日期、地點或其他必填資料時，管理員需先補齊才能建立活動草稿；建立後沿用既有審核及發布流程。同步不會登入學校網站或讀取 Webmail。
+個人報名與 QR API 僅接受 `student` session，查詢以登入者的 user ID 限定。QR 內容是以 `SECRET_KEY` 簽署的不可偽造 token，資料庫只保存 token 雜湊；只有本人可取得 QR SVG，管理員或簽到人員可用 `/api/check-in/qr/lookup` 解析。QR 僅供報名查找，現場仍須核對本人與校園照片證件；簽到更新採單次原子操作並記錄時間及操作人員。
+
+現場相機掃碼使用瀏覽器 `BarcodeDetector`，需支援 QR 格式並在 HTTPS 或 localhost 安全來源執行、允許相機權限；不支援的瀏覽器可貼上 QR token 查詢。報名搜尋可輸入姓名、校內信箱或 Registration ID。簽到結果若已由其他工作人員更新，前端會重新查詢實際簽到狀態。
 
 請將 `SECRET_KEY` 換成唯一、至少 32 字元的隨機值；範例佔位值會被登入模組拒絕。正式環境使用 HTTPS，並將 `SESSION_COOKIE_SECURE=True`；登入 session 為資料庫管理的 HttpOnly/SameSite cookie，最長 14 天，登出時立即撤銷。系統只驗證所輸入帳號密碼，不連線學校 Webmail，也不使用校內 SSO 密碼。
 
@@ -76,33 +75,48 @@ DO UPDATE SET display_name = EXCLUDED.display_name,
 - Python 3.11+
 - FastAPI
 - Uvicorn
-- SQLAlchemy / databases（視實際專案而定）
 - Pydantic
-- PostgreSQL / SQLite（依環境設定）
+- PostgreSQL（唯一支援的資料庫）
+- psycopg 3（PostgreSQL 驅動；資料存取使用 SQL）
 - dotenv / Python 環境變數管理
+
+本專案使用 PostgreSQL 專用 SQL 與資料型別，不支援 SQLite，也未使用 SQLAlchemy ORM。
+路由集中於 `app/routers/`；資料驗證模型集中於 `app/models/main.py`；PostgreSQL 連線與資料表初始化由 `app/core/db.py` 管理。
 
 ## 專案結構
 
 ```text
 fastapi-backend/
 ├── app/
-│   ├── __init__.py
 │   ├── main.py
-│   ├── api/
-│   │   └── __init__.py
 │   ├── core/
-│   │   ├── __init__.py
-│   │   └── db.py
-│   └── models/
-│       ├── __init__.py
-│       └── main.py
-├── .env
+│   │   ├── db.py
+│   │   ├── password_auth.py
+│   │   └── registration_qr.py
+│   ├── models/
+│   │   └── main.py
+│   ├── routers/
+│   │   ├── auth.py
+│   │   ├── notes.py
+│   │   ├── system.py
+│   │   └── user_access.py
+│   └── static/
+│       ├── assets/
+│       │   ├── css/style.css
+│       │   └── js/app.js
+│       ├── data/activities.json
+│       └── index.html
+├── tests/
+│   ├── test_activity_model.py
+│   ├── test_api_integration.py
+│   ├── test_auth_logout.py
+│   ├── test_password_auth.py
+│   └── test_registration_qr.py
 ├── .env.example
 ├── .gitignore
 ├── README.md
 ├── requirements.txt
-├── venv/
-└── ...
+└── run.bat
 ```
 
 ## 安裝與啟動
@@ -143,14 +157,16 @@ copy .env.example .env
 cp .env.example .env
 ```
 
-範例內容：
+請設定 PostgreSQL 連線字串與足夠隨機且至少 32 字元的 `SECRET_KEY`。範例值僅供本機開發，不可用於正式環境。主要設定如下：
 
 ```env
-DATABASE_URL=postgresql://dev_user:dev_password@localhost:5432/fastapi_dev
+DATABASE_URL=postgresql://username:password@localhost:5432/fastapi_db
+SECRET_KEY=replace-with-a-unique-random-secret-at-least-32-characters
 ROOT_PATH=/s113321021
+SESSION_COOKIE_SECURE=False
 ```
 
-若你在反向代理底下部署，請讓 `ROOT_PATH` 與實際網址前綴完全一致。
+`CORS_ORIGINS` 可設定允許的前端來源；正式環境使用 HTTPS 時，請將 `SESSION_COOKIE_SECURE=True`。若部署於反向代理底下，請讓 `ROOT_PATH` 與實際網址前綴完全一致。
 
 ### 4. 啟動開發伺服器
 
@@ -196,16 +212,30 @@ pip install package-name
 pip freeze > requirements.txt
 ```
 
+### 執行測試
+
+一般單元測試：
+
+```powershell
+.\venv\Scripts\python.exe -m unittest discover -s tests -v
+```
+
+登入／權限、活動審核發布、報名及簽到的 API 資料庫整合測試需要一個可丟棄的 PostgreSQL 測試資料庫。設定 `TEST_DATABASE_URL` 後再執行同一命令：
+
+```powershell
+$env:TEST_DATABASE_URL = "postgresql://user:password@localhost:5432/fastapi_test"
+.\venv\Scripts\python.exe -m unittest discover -s tests -v
+```
+
+整合測試只使用 `TEST_DATABASE_URL`，並在其中建立隨機名稱的隔離 schema；測試結束後會刪除該 schema，不會清空 `DATABASE_URL` 指向的應用程式資料庫。未設定 `TEST_DATABASE_URL` 時，整合測試會明確標記為略過。
+
 ## 環境變數說明
 
-以下為常見配置項目，可依專案實際需求調整：
-
-- APP_NAME：專案名稱
-- DEBUG：是否開啟 debug 模式
-- SECRET_KEY：JWT 或簽名用金鑰
-- DATABASE_URL：資料庫連線字串
-- ALLOWED_HOSTS：允許的 host
-- CORS_ORIGINS：跨域來源設定
+- `DATABASE_URL`：PostgreSQL 連線字串；未設定時不會在啟動時初始化資料庫。
+- `SECRET_KEY`：用於密碼驗證相關簽名及報名 QR token，需為唯一且至少 32 字元的隨機值。
+- `ROOT_PATH`：反向代理公開路徑前綴；本機根目錄部署可設為空字串。
+- `CORS_ORIGINS`：JSON 格式的允許來源清單，例如 `["https://example.edu"]`。
+- `SESSION_COOKIE_SECURE`：正式 HTTPS 環境應設為 `True`；本機 HTTP 開發可設為 `False`。
 
 ## 開發規範
 

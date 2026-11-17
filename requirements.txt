@@ -19,4 +19,4 @@ websockets==17.1
 psycopg[binary]
 argon2-cffi
 httpx
-beautifulsoup4
+segno
