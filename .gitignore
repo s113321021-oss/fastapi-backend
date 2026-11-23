@@ -1,9 +1,24 @@
-// ...existing code...
 # Python bytecode / cache
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
+
+# Python tooling
+.python-version
+.pip/
+.tox/
+.nox/
+.mypy_cache/
+.ruff_cache/
+.pyright/
+.pytest_cache/
+.hypothesis/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.cache/
 
 # Distribution / packaging
 .Python
@@ -32,11 +47,18 @@ ENV/
 env/
 env.bak/
 venv.bak/
+pyvenv.cfg
+
+# pip / uv
+.uv/
+pip-wheel-metadata/
 
 # Environment variables
 .env
 .env.*
 !.env.example
+*.pem
+*.key
 
 # IDE / editor settings
 .vscode/
@@ -46,20 +68,7 @@ venv.bak/
 *~
 .DS_Store
 Thumbs.db
-
-# Testing / coverage
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.pyright/
-.hypothesis/
-.coverage
-.coverage.*
-htmlcov/
-.tox/
-.nox/
-pytest_session.txt
-.cache/
+desktop.ini
 
 # Jupyter
 .ipynb_checkpoints/
@@ -70,6 +79,7 @@ logs/
 log/
 
 # Local database / runtime files
+*.sqlite
 *.sqlite3
 *.db
 *.db-journal

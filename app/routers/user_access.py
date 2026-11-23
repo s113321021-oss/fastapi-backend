@@ -21,6 +21,7 @@ from app.models.main import (
     ActivityReview,
     ActivityStatus,
     ActivityUpdate,
+    ActivityStaffAssignment,
     CheckInQrLookup,
     Role,
     User,
@@ -287,6 +288,7 @@ def read_my_registration_qr(
     response = StarletteResponse(render_registration_qr(token), media_type="image/svg+xml")
     response.headers["Cache-Control"] = "private, no-store"
     response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-QR-Token"] = token
     return response
 
 
@@ -339,6 +341,137 @@ def provision_user(
         display_name=row[2],
         role=Role(row[3]),
     )
+
+
+@router.get("/admin/check-in-staff")
+def list_check_in_staff(admin: User = Depends(require_admin)) -> list[dict]:
+    del admin
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, email, display_name
+                FROM users
+                WHERE role = 'checkin'
+                ORDER BY display_name, email
+                """
+            )
+            rows = cur.fetchall()
+    return [
+        {"id": row[0], "email": row[1], "display_name": row[2]}
+        for row in rows
+    ]
+
+
+@router.get("/admin/activities/{activity_id}/staff")
+def list_activity_staff(
+    activity_id: int,
+    admin: User = Depends(require_admin),
+) -> list[dict]:
+    del admin
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id FROM activities WHERE id = %s",
+                (activity_id,),
+            )
+            if cur.fetchone() is None:
+                raise HTTPException(status_code=404, detail="Activity not found.")
+            cur.execute(
+                """
+                SELECT u.id, u.email, u.display_name, s.assigned_at
+                FROM activity_staff AS s
+                JOIN users AS u ON u.id = s.user_id
+                WHERE s.activity_id = %s AND u.role = 'checkin'
+                ORDER BY u.display_name, u.email
+                """,
+                (activity_id,),
+            )
+            rows = cur.fetchall()
+    return [
+        {
+            "id": row[0],
+            "email": row[1],
+            "display_name": row[2],
+            "assigned_at": row[3],
+        }
+        for row in rows
+    ]
+
+
+@router.post("/admin/activities/{activity_id}/staff", status_code=201)
+def assign_activity_staff(
+    activity_id: int,
+    assignment: ActivityStaffAssignment,
+    admin: User = Depends(require_admin),
+) -> dict:
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id FROM activities WHERE id = %s",
+                (activity_id,),
+            )
+            if cur.fetchone() is None:
+                raise HTTPException(status_code=404, detail="Activity not found.")
+            cur.execute(
+                "SELECT id, email, display_name FROM users WHERE id = %s AND role = 'checkin'",
+                (assignment.user_id,),
+            )
+            staff = cur.fetchone()
+            if staff is None:
+                raise HTTPException(status_code=422, detail="User is not a check-in staff account.")
+            cur.execute(
+                """
+                INSERT INTO activity_staff (activity_id, user_id, assigned_by)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (activity_id, user_id) DO NOTHING
+                RETURNING assigned_at
+                """,
+                (activity_id, assignment.user_id, admin.id),
+            )
+            cur.fetchone()
+            conn.commit()
+    return {"id": staff[0], "email": staff[1], "display_name": staff[2]}
+
+
+@router.delete("/admin/activities/{activity_id}/staff/{user_id}", status_code=204)
+def remove_activity_staff(
+    activity_id: int,
+    user_id: int,
+    admin: User = Depends(require_admin),
+) -> None:
+    del admin
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM activity_staff WHERE activity_id = %s AND user_id = %s",
+                (activity_id, user_id),
+            )
+            conn.commit()
+
+
+@router.get("/check-in/activities")
+def list_assigned_check_in_activities(
+    staff: User = Depends(require_check_in_staff),
+) -> list[dict]:
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            if staff.role is Role.ADMIN:
+                cur.execute(
+                    f"SELECT {ACTIVITY_COLUMNS} FROM activities "
+                    "WHERE status = 'published' ORDER BY starts_at ASC"
+                )
+                rows = cur.fetchall()
+            else:
+                cur.execute(
+                    f"SELECT {ACTIVITY_COLUMNS} FROM activities "
+                    "JOIN activity_staff ON activity_staff.activity_id = activities.id "
+                    "WHERE activity_staff.user_id = %s AND activities.status = 'published' "
+                    "ORDER BY activities.starts_at ASC",
+                    (staff.id,),
+                )
+                rows = cur.fetchall()
+    return [activity_response(row) for row in rows]
 
 
 @router.post("/admin/activities", status_code=201)
@@ -580,6 +713,42 @@ def publish_activity(
     return activity_response(row)
 
 
+@router.post("/admin/activities/{activity_id}/archive")
+def archive_activity(
+    activity_id: int,
+    admin: User = Depends(require_admin),
+) -> dict:
+    del admin
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE activities
+                SET status = 'archived'
+                WHERE id = %s AND status = 'published'
+                RETURNING id
+                """,
+                (activity_id,),
+            )
+            updated = cur.fetchone()
+            if updated is None:
+                cur.execute("SELECT id FROM activities WHERE id = %s", (activity_id,))
+                exists = cur.fetchone()
+                if exists is None:
+                    raise HTTPException(status_code=404, detail="Activity not found.")
+                raise HTTPException(
+                    status_code=409,
+                    detail="Only published activities can be archived.",
+                )
+            cur.execute(
+                f"SELECT {ACTIVITY_COLUMNS} FROM activities WHERE id = %s",
+                (activity_id,),
+            )
+            row = cur.fetchone()
+            conn.commit()
+    return activity_response(row)
+
+
 @router.get("/admin/activities/statistics")
 def activity_statistics(admin: User = Depends(require_admin)) -> list[dict]:
     del admin
@@ -628,9 +797,15 @@ def find_registrations_for_check_in(
     search: str | None = Query(default=None, max_length=255),
     staff: User = Depends(require_check_in_staff),
 ) -> list[dict]:
-    del staff
     with get_db_connection() as conn:
         with conn.cursor() as cur:
+            if staff.role is Role.CHECK_IN:
+                cur.execute(
+                    "SELECT 1 FROM activity_staff WHERE activity_id = %s AND user_id = %s",
+                    (activity_id, staff.id),
+                )
+                if cur.fetchone() is None:
+                    raise HTTPException(status_code=403, detail="You are not assigned to this activity.")
             cur.execute(
                 """
                 SELECT r.id, a.id, a.title, u.display_name, u.email,
@@ -670,9 +845,27 @@ def find_registration_by_qr(
     payload: CheckInQrLookup,
     staff: User = Depends(require_check_in_staff),
 ) -> dict:
-    del staff
     with get_db_connection() as conn:
         with conn.cursor() as cur:
+            if staff.role is Role.CHECK_IN:
+                cur.execute(
+                    """
+                    SELECT 1
+                    FROM registrations AS r
+                    JOIN activity_staff AS s
+                      ON s.activity_id = r.activity_id AND s.user_id = %s
+                    WHERE r.qr_token_hash = %s
+                      AND (%s::integer IS NULL OR r.activity_id = %s)
+                    """,
+                    (
+                        staff.id,
+                        hash_registration_qr_token(payload.token),
+                        payload.activity_id,
+                        payload.activity_id,
+                    ),
+                )
+                if cur.fetchone() is None:
+                    raise HTTPException(status_code=403, detail="You are not assigned to this activity.")
             cur.execute(
                 """
                 SELECT r.id, a.id, a.title, u.display_name, u.email,
@@ -710,6 +903,19 @@ def confirm_check_in(
 ) -> dict:
     with get_db_connection() as conn:
         with conn.cursor() as cur:
+            if staff.role is Role.CHECK_IN:
+                cur.execute(
+                    """
+                    SELECT 1
+                    FROM registrations AS r
+                    JOIN activity_staff AS s
+                      ON s.activity_id = r.activity_id AND s.user_id = %s
+                    WHERE r.id = %s
+                    """,
+                    (staff.id, registration_id),
+                )
+                if cur.fetchone() is None:
+                    raise HTTPException(status_code=403, detail="You are not assigned to this activity.")
             cur.execute(
                 """
                 UPDATE registrations

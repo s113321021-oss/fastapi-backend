@@ -16,10 +16,22 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="static/assets/css/style.css?v=8" />
+    <link rel="stylesheet" href="static/assets/css/style.css?v=11" />
   </head>
   <body>
     <header class="site-header">
+      <button
+        class="menu-toggle"
+        id="sidebarToggle"
+        type="button"
+        aria-label="開啟活動導覽"
+        aria-controls="activitySidebar"
+        aria-expanded="false"
+      >
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
       <a class="brand" href="#" aria-label="拾光校園首頁">
         <span class="brand-mark" aria-hidden="true">拾</span>
         <span class="brand-copy">
@@ -28,7 +40,7 @@
         </span>
       </a>
       <div class="header-actions">
-        <span class="header-note">讓每個相遇，都成為校園回憶</span>
+        <span class="header-note" id="headerNote">讓每個相遇，都成為校園回憶</span>
         <button class="button button-primary login-button" type="button" data-open-login>
           <svg aria-hidden="true" viewBox="0 0 20 20">
             <path d="M10 10a3.25 3.25 0 1 0 0-6.5A3.25 3.25 0 0 0 10 10Zm-6 6.25a6 6 0 0 1 12 0v.5H4v-.5Z" />
@@ -42,8 +54,12 @@
     </header>
 
     <div class="app-shell">
-      <aside class="sidebar" aria-label="活動導覽">
-        <p class="sidebar-heading">探索校園</p>
+      <button class="sidebar-backdrop" id="sidebarBackdrop" type="button" aria-label="關閉活動導覽" hidden></button>
+      <aside class="sidebar" id="activitySidebar" aria-label="活動導覽">
+        <div class="sidebar-heading">
+          <span>探索校園</span>
+          <button class="sidebar-close" id="sidebarClose" type="button" aria-label="關閉活動導覽">×</button>
+        </div>
         <nav class="side-nav">
           <button class="nav-link is-active" type="button" data-category="all" aria-current="page">
             <span class="nav-icon" aria-hidden="true">⌂</span>
@@ -76,7 +92,7 @@
           <span class="nav-divider" aria-hidden="true"></span>
           <button class="nav-link nav-link-muted" id="myRegistrationsNav" type="button" hidden>
             <span class="nav-icon" aria-hidden="true">▤</span>
-            <span>我的報名</span>
+            <span>我的活動紀錄</span>
           </button>
           <button class="nav-link" id="checkInNav" type="button" hidden>
             <span class="nav-icon" aria-hidden="true">✓</span>
@@ -86,6 +102,10 @@
             <span class="nav-icon" aria-hidden="true">⚙</span>
             <span>活動管理</span>
           </button>
+          <button class="nav-link" id="adminDraftNav" type="button" hidden>
+            <span class="nav-icon" aria-hidden="true">＋</span>
+            <span>建立草稿活動</span>
+          </button>
         </nav>
         <div class="sidebar-note">
           <span class="sidebar-note-icon" aria-hidden="true">✦</span>
@@ -94,7 +114,7 @@
       </aside>
 
       <main class="main-content">
-        <section class="welcome-banner" aria-labelledby="welcome-title">
+        <section class="welcome-banner" id="welcomeBanner" aria-labelledby="welcome-title">
           <div class="welcome-copy">
             <span class="eyebrow"><span class="eyebrow-dot"></span> CAMPUS LIFE, YOUR WAY</span>
             <h1 id="welcome-title">把校園生活，<br class="mobile-break" />排進行事曆。</h1>
@@ -161,7 +181,7 @@
           <div class="section-heading">
             <div>
               <span class="section-kicker">YOUR CAMPUS MOMENTS</span>
-              <h2 id="myRegistrationsTitle">我的報名</h2>
+              <h2 id="myRegistrationsTitle">我的活動紀錄</h2>
               <p class="section-subtitle">查看已報名活動與現場簽到狀態。</p>
             </div>
           </div>
@@ -225,6 +245,7 @@
                 <option value="approved">已核准</option>
                 <option value="rejected">已拒絕</option>
                 <option value="published">已發布</option>
+                <option value="archived">已封存</option>
               </select>
             </label>
           </div>
@@ -254,69 +275,78 @@
             </div>
           </section>
           <div class="admin-layout">
-            <form class="admin-form" id="activityForm">
-              <h3 id="activityFormTitle">建立草稿活動</h3>
-              <label>
-                活動名稱
-                <input name="title" maxlength="255" required />
-              </label>
-              <div class="form-row">
-                <label>
-                  活動分類
-                  <select name="category" required>
-                    <option value="talk">講座分享</option>
-                    <option value="workshop">工作坊</option>
-                    <option value="club">社團活動</option>
-                    <option value="culture">藝文展演</option>
-                    <option value="sports">運動休閒</option>
-                    <option value="career">職涯成長</option>
-                    <option value="other">其他活動</option>
-                  </select>
-                </label>
-                <label>
-                  主辦單位
-                  <input name="organizer" maxlength="255" required />
-                </label>
-              </div>
-              <div class="form-row datetime-form-row">
-                <label>
-                  活動時間
-                  <span class="datetime-range">
-                    <input name="starts_at" type="datetime-local" aria-label="活動開始時間" required />
-                    <span aria-hidden="true">至</span>
-                    <input name="ends_at" type="datetime-local" aria-label="活動結束時間" required />
-                  </span>
-                </label>
-                <label>
-                  報名時間
-                  <span class="datetime-range">
-                    <input name="registration_opens_at" type="datetime-local" aria-label="報名開始時間" required />
-                    <span aria-hidden="true">至</span>
-                    <input name="registration_deadline" type="datetime-local" aria-label="報名截止時間" required />
-                  </span>
-                </label>
-              </div>
-              <div class="form-row">
-                <label>
-                  活動地點
-                  <input name="location" maxlength="255" required />
-                </label>
-                <label>
-                  最大名額
-                  <input name="capacity" type="number" min="1" max="100000" required />
-                </label>
-              </div>
-              <label>
-                活動描述
-                <textarea name="description" rows="4" maxlength="10000" required></textarea>
-              </label>
-              <div class="admin-form-actions">
-                <button class="button button-primary" type="submit" id="saveActivityButton">儲存草稿</button>
-                <button class="button button-outline" type="button" id="cancelEditButton" hidden>取消編輯</button>
-              </div>
-            </form>
             <div class="admin-activity-list" id="adminActivityList" aria-live="polite"></div>
           </div>
+        </section>
+
+        <section class="admin-draft-panel" id="adminDraftPanel" aria-labelledby="activityFormTitle" hidden>
+          <div class="section-heading">
+            <div>
+              <span class="section-kicker">NEW EVENT DRAFT</span>
+              <h2 id="activityFormTitle">建立草稿活動</h2>
+              <p class="section-subtitle">先建立草稿，再到活動管理頁核准與發布。</p>
+            </div>
+          </div>
+          <form class="admin-form" id="activityForm">
+            <label>
+              活動名稱
+              <input name="title" maxlength="255" required />
+            </label>
+            <div class="form-row">
+              <label>
+                活動分類
+                <select name="category" required>
+                  <option value="talk">講座分享</option>
+                  <option value="workshop">工作坊</option>
+                  <option value="club">社團活動</option>
+                  <option value="culture">藝文展演</option>
+                  <option value="sports">運動休閒</option>
+                  <option value="career">職涯成長</option>
+                  <option value="other">其他活動</option>
+                </select>
+              </label>
+              <label>
+                主辦單位
+                <input name="organizer" maxlength="255" required />
+              </label>
+            </div>
+            <div class="form-row datetime-form-row">
+              <label>
+                活動時間
+                <span class="datetime-range">
+                  <input name="starts_at" type="datetime-local" aria-label="活動開始時間" required />
+                  <span aria-hidden="true">至</span>
+                  <input name="ends_at" type="datetime-local" aria-label="活動結束時間" required />
+                </span>
+              </label>
+              <label>
+                報名時間
+                <span class="datetime-range">
+                  <input name="registration_opens_at" type="datetime-local" aria-label="報名開始時間" required />
+                  <span aria-hidden="true">至</span>
+                  <input name="registration_deadline" type="datetime-local" aria-label="報名截止時間" required />
+                </span>
+              </label>
+            </div>
+            <div class="form-row">
+              <label>
+                活動地點
+                <input name="location" maxlength="255" required />
+              </label>
+              <label>
+                最大名額
+                <input name="capacity" type="number" min="1" max="100000" required />
+              </label>
+            </div>
+            <label>
+              活動描述
+              <textarea name="description" rows="4" maxlength="10000" required></textarea>
+            </label>
+            <div class="admin-form-actions">
+              <button class="button button-primary" type="submit" id="saveActivityButton">儲存草稿</button>
+              <button class="button button-outline" type="button" id="cancelEditButton" hidden>取消編輯</button>
+            </div>
+          </form>
         </section>
 
         <footer class="site-footer">
@@ -336,6 +366,13 @@
       <h2 id="registrationQrTitle">活動報名 QR Code</h2>
       <p id="registrationQrMessage" class="registration-qr-message" role="status" aria-live="polite"></p>
       <img id="registrationQrImage" class="registration-qr-image" alt="此活動的專屬報名 QR Code" hidden />
+      <div class="registration-qr-token" id="registrationQrTokenBlock" hidden>
+        <label for="registrationQrToken">QR token（相機無法使用時貼上）</label>
+        <div class="registration-qr-token-row">
+          <input id="registrationQrToken" type="text" readonly />
+          <button class="button button-outline" id="copyRegistrationQrToken" type="button">複製</button>
+        </div>
+      </div>
       <p class="registration-qr-note">請於活動現場出示此碼，並配合工作人員核對本人身分。</p>
     </dialog>
     <dialog class="modal login-modal" id="loginDialog" aria-labelledby="loginDialogTitle">
@@ -385,6 +422,6 @@
       </p>
     </dialog>
 
-    <script src="static/assets/js/app.js?v=12" defer></script>
+    <script src="static/assets/js/app.js?v=18" defer></script>
   </body>
 </html>

@@ -90,12 +90,35 @@ def initialize_tables(conn: psycopg.Connection) -> None:
                 registration_opens_at TIMESTAMPTZ,
                 registration_deadline TIMESTAMPTZ NOT NULL,
                 status VARCHAR(20) NOT NULL DEFAULT 'draft'
-                    CHECK (status IN ('draft', 'approved', 'rejected', 'published')),
+                    CHECK (status IN ('draft', 'approved', 'rejected', 'published', 'archived')),
                 review_note TEXT,
                 created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 published_at TIMESTAMPTZ
             )
+            """
+        )
+        cur.execute(
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM pg_constraint
+                    WHERE conrelid = 'activities'::regclass
+                      AND conname = 'activities_status_check'
+                      AND position('archived' in pg_get_constraintdef(oid)) > 0
+                ) THEN
+                    ALTER TABLE activities
+                        DROP CONSTRAINT IF EXISTS activities_status_check;
+                    ALTER TABLE activities
+                        ADD CONSTRAINT activities_status_check
+                        CHECK (status IN (
+                            'draft', 'approved', 'rejected', 'published', 'archived'
+                        ));
+                END IF;
+            END
+            $$
             """
         )
         cur.execute(
@@ -134,5 +157,20 @@ def initialize_tables(conn: psycopg.Connection) -> None:
         cur.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS registrations_qr_token_hash_uq "
             "ON registrations (qr_token_hash) WHERE qr_token_hash IS NOT NULL"
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS activity_staff (
+                activity_id INTEGER NOT NULL REFERENCES activities(id) ON DELETE CASCADE,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                assigned_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                assigned_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                PRIMARY KEY (activity_id, user_id)
+            )
+            """
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS activity_staff_user_idx "
+            "ON activity_staff (user_id, activity_id)"
         )
     conn.commit()

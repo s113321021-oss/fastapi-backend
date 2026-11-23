@@ -19,6 +19,7 @@ class ActivityStatus(StrEnum):
     APPROVED = "approved"
     REJECTED = "rejected"
     PUBLISHED = "published"
+    ARCHIVED = "archived"
 
 
 class CheckInQrLookup(BaseModel):
@@ -124,3 +125,7 @@ class NoteCreate(BaseModel):
 class Note(NoteCreate):
     id: int
     created_at: datetime | None = None
+
+
+class ActivityStaffAssignment(BaseModel):
+    user_id: int = Field(ge=1)

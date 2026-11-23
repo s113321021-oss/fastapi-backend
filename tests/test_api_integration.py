@@ -339,6 +339,10 @@ class ApiDatabaseIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(qr_response.status_code, 200, qr_response.text)
         self.assertEqual(qr_response.headers["content-type"], "image/svg+xml")
+        self.assertEqual(
+            qr_response.headers["x-qr-token"],
+            create_registration_qr_token(registration["id"], student["id"]),
+        )
         self.assertIn(b"<svg", qr_response.content)
 
         second_user = admin_client.post(
@@ -378,6 +382,12 @@ class ApiDatabaseIntegrationTests(unittest.TestCase):
             "CheckinIntegrationPass123!",
         )
         self.assertEqual(checkin_login.status_code, 200, checkin_login.text)
+        checkin_user = checkin_client.get("/api/auth/me").json()
+        assigned = admin_client.post(
+            f"/api/admin/activities/{activity_id}/staff",
+            json={"user_id": checkin_user["id"]},
+        )
+        self.assertEqual(assigned.status_code, 201, assigned.text)
         self.assertEqual(
             checkin_client.get(
                 "/api/admin/activities/statistics"
@@ -442,6 +452,73 @@ class ApiDatabaseIntegrationTests(unittest.TestCase):
         self.assertEqual(activity_statistics["check_in_count"], 1)
         self.assertEqual(activity_statistics["not_checked_in_count"], 0)
         self.assertEqual(activity_statistics["check_in_rate"], 100.0)
+
+    def test_archiving_activity_hides_it_and_preserves_registration_and_checkin(self):
+        self.login_as_admin()
+        activity_id, _ = self.create_published_activity(self.client)
+        admin_client = TestClient(self.app)
+        self.assertEqual(
+            self.login(
+                admin_client,
+                "admin@example.edu",
+                "AdminIntegrationPass123!",
+            ).status_code,
+            200,
+        )
+        student = self.make_student()
+        student_client = TestClient(self.app)
+        self.assertEqual(
+            self.login(
+                student_client,
+                student["email"],
+                "StudentIntegrationPass123!",
+            ).status_code,
+            200,
+        )
+        self.assertEqual(
+            student_client.post(
+                f"/api/activities/{activity_id}/registrations"
+            ).status_code,
+            201,
+        )
+        registration = student_client.get("/api/registrations/me").json()[0]
+        self.assertEqual(
+            admin_client.post(
+                f"/api/check-in/registrations/{registration['id']}/confirm"
+            ).status_code,
+            200,
+        )
+
+        archived = admin_client.post(
+            f"/api/admin/activities/{activity_id}/archive"
+        )
+
+        self.assertEqual(archived.status_code, 200, archived.text)
+        self.assertEqual(archived.json()["status"], "archived")
+        self.assertNotIn(
+            activity_id,
+            [activity["id"] for activity in admin_client.get("/api/activities").json()],
+        )
+        self.assertEqual(
+            admin_client.get(f"/api/activities/{activity_id}").status_code,
+            404,
+        )
+        self.assertEqual(
+            student_client.post(
+                f"/api/activities/{activity_id}/registrations"
+            ).status_code,
+            404,
+        )
+        retained = student_client.get("/api/registrations/me").json()[0]
+        self.assertEqual(retained["id"], registration["id"])
+        self.assertIsNotNone(retained["checked_in_at"])
+        statistics = admin_client.get("/api/admin/activities/statistics").json()
+        archived_statistics = next(
+            item for item in statistics if item["activity_id"] == activity_id
+        )
+        self.assertEqual(archived_statistics["status"], "archived")
+        self.assertEqual(archived_statistics["registration_count"], 1)
+        self.assertEqual(archived_statistics["check_in_count"], 1)
 
 
 if __name__ == "__main__":

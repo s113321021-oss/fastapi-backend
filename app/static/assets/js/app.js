@@ -1,6 +1,10 @@
 const activityGrid = document.getElementById('activityGrid');
 const categoryFilters = document.getElementById('categoryFilters');
 const activitySearch = document.getElementById('activitySearch');
+const sidebar = document.getElementById('activitySidebar');
+const sidebarToggle = document.getElementById('sidebarToggle');
+const sidebarClose = document.getElementById('sidebarClose');
+const sidebarBackdrop = document.getElementById('sidebarBackdrop');
 const resultsCount = document.getElementById('resultsCount');
 const emptyState = document.getElementById('emptyState');
 const loadError = document.getElementById('loadError');
@@ -9,6 +13,7 @@ const activityDialogContent = document.getElementById('activityDialogContent');
 const loginDialog = document.getElementById('loginDialog');
 const loginButton = document.querySelector('.login-button');
 const logoutButton = document.getElementById('logoutButton');
+const headerNote = document.getElementById('headerNote');
 const accountForm = document.getElementById('accountForm');
 const accountSubmitButton = document.getElementById('accountSubmitButton');
 const authModeToggle = document.getElementById('authModeToggle');
@@ -17,7 +22,11 @@ const displayNameLabel = document.getElementById('displayNameLabel');
 const displayNameInput = document.getElementById('displayName');
 const loginMessage = document.getElementById('loginMessage');
 const adminNav = document.getElementById('adminNav');
+const adminDraftNav = document.getElementById('adminDraftNav');
 const adminPanel = document.getElementById('adminPanel');
+const adminDraftPanel = document.getElementById('adminDraftPanel');
+const welcomeBanner = document.getElementById('welcomeBanner');
+const activitiesSection = document.getElementById('activities');
 const statisticsActivitySelect = document.getElementById('statisticsActivitySelect');
 const activityStatisticsMessage = document.getElementById('activityStatisticsMessage');
 const activityStatisticsContent = document.getElementById('activityStatisticsContent');
@@ -46,6 +55,9 @@ const registrationQrDialog = document.getElementById('registrationQrDialog');
 const registrationQrTitle = document.getElementById('registrationQrTitle');
 const registrationQrMessage = document.getElementById('registrationQrMessage');
 const registrationQrImage = document.getElementById('registrationQrImage');
+const registrationQrTokenBlock = document.getElementById('registrationQrTokenBlock');
+const registrationQrToken = document.getElementById('registrationQrToken');
+const copyRegistrationQrToken = document.getElementById('copyRegistrationQrToken');
 const adminActivityList = document.getElementById('adminActivityList');
 const adminMessage = document.getElementById('adminMessage');
 const activityForm = document.getElementById('activityForm');
@@ -80,6 +92,71 @@ let registrationQrObjectUrl = null;
 let qrMediaStream = null;
 let qrDetector = null;
 let qrScannerActive = false;
+let checkInStaff = [];
+let activityAssignments = {};
+let checkInActivities = [];
+let activePage = 'overview';
+
+function setPage(page) {
+  const allowedPages = {
+    overview: true,
+    registrations: currentUser?.role === 'student',
+    checkin: ['admin', 'checkin'].includes(currentUser?.role),
+    admin: currentUser?.role === 'admin',
+    draft: currentUser?.role === 'admin'
+  };
+  if (!allowedPages[page]) page = 'overview';
+  activePage = page;
+
+  welcomeBanner.hidden = page !== 'overview';
+  activitiesSection.hidden = page !== 'overview';
+  myRegistrationsSection.hidden = page !== 'registrations';
+  checkInPanel.hidden = page !== 'checkin';
+  adminPanel.hidden = page !== 'admin';
+  adminDraftPanel.hidden = page !== 'draft';
+
+  document.querySelectorAll('.nav-link').forEach((button) => {
+    button.classList.remove('is-active');
+    button.removeAttribute('aria-current');
+  });
+
+  if (page === 'overview') {
+    const overviewButton = document.querySelector(
+      `.nav-link[data-category="${activeCategory}"]`
+    );
+    if (overviewButton) {
+      overviewButton.classList.add('is-active');
+      overviewButton.setAttribute('aria-current', 'page');
+    }
+  } else {
+    const pageButton = {
+      registrations: myRegistrationsNav,
+      checkin: checkInNav,
+      admin: adminNav,
+      draft: adminDraftNav
+    }[page];
+    if (pageButton) {
+      pageButton.classList.add('is-active');
+      pageButton.setAttribute('aria-current', 'page');
+    }
+  }
+
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function setSidebarOpen(isOpen, returnFocus = false) {
+  sidebar.classList.toggle('is-open', isOpen);
+  sidebarBackdrop.hidden = !isOpen;
+  sidebarToggle.setAttribute('aria-expanded', String(isOpen));
+  sidebarToggle.setAttribute('aria-label', isOpen ? '關閉活動導覽' : '開啟活動導覽');
+  document.body.classList.toggle('sidebar-open', isOpen);
+
+  if (isOpen) {
+    sidebar.querySelector('.nav-link:not([hidden])')?.focus();
+  } else if (returnFocus) {
+    sidebarToggle.focus({ preventScroll: true });
+  }
+}
 
 function apiUrl(path) {
   return new URL(`api/${path}`, document.baseURI);
@@ -377,6 +454,8 @@ function bindDialogControls() {
     }
     registrationQrImage.removeAttribute('src');
     registrationQrImage.hidden = true;
+    registrationQrTokenBlock.hidden = true;
+    registrationQrToken.value = '';
   });
 }
 
@@ -387,18 +466,35 @@ function setLoginMessage(message, isError = false) {
 
 function setCurrentUser(user) {
   currentUser = user;
+  const roleLabels = {
+    admin: '管理員',
+    student: '學生',
+    checkin: '簽到人員'
+  };
+  headerNote.textContent = user
+    ? `${roleLabels[user.role] || user.role} ${user.display_name}(${user.email})`
+    : '讓每個相遇，都成為校園回憶';
   loginButton.hidden = Boolean(user);
   logoutButton.hidden = !user;
   const isStudent = user?.role === 'student';
   myRegistrationsNav.hidden = !isStudent;
-  myRegistrationsSection.hidden = !isStudent;
   const canCheckIn = user?.role === 'admin' || user?.role === 'checkin';
   checkInNav.hidden = !canCheckIn;
-  checkInPanel.hidden = !canCheckIn;
+  adminNav.hidden = user?.role !== 'admin';
+  adminDraftNav.hidden = user?.role !== 'admin';
+  if (canCheckIn) loadCheckInActivities();
   if (!canCheckIn) stopQrScanner();
   if (!isStudent) {
     myRegistrations = [];
     myRegistrationList.replaceChildren();
+  }
+  if (
+    (activePage === 'registrations' && !isStudent) ||
+    (activePage === 'checkin' && !canCheckIn) ||
+    (activePage === 'admin' && user?.role !== 'admin') ||
+    (activePage === 'draft' && user?.role !== 'admin')
+  ) {
+    setPage('overview');
   }
   if (user) logoutButton.setAttribute('aria-label', `登出 ${user.display_name}`);
 }
@@ -494,7 +590,7 @@ async function loadActivities() {
       registered_count: activity.registered_count || 0,
       tags: activity.tags || []
     }));
-    updateCheckInActivityOptions();
+    await loadCheckInActivities();
     renderCategoryFilters();
     renderActivities();
   } catch (error) {
@@ -508,14 +604,14 @@ async function loadActivities() {
 function updateCheckInActivityOptions() {
   const selectedActivityId = checkInActivitySelect.value;
   checkInActivitySelect.replaceChildren(new Option('請選擇活動', ''));
-  activities.forEach((activity) => {
+  checkInActivities.forEach((activity) => {
     const option = new Option(
       `${activity.title} · ${formatEventDate(activity.starts_at)}`,
       String(activity.id)
     );
     checkInActivitySelect.add(option);
   });
-  if (activities.some((activity) => String(activity.id) === selectedActivityId)) {
+  if (checkInActivities.some((activity) => String(activity.id) === selectedActivityId)) {
     checkInActivitySelect.value = selectedActivityId;
   }
 }
@@ -790,6 +886,9 @@ async function showRegistrationQr(registration) {
   registrationQrMessage.textContent = '正在產生專屬 QR Code...';
   registrationQrMessage.classList.remove('is-error');
   registrationQrImage.hidden = true;
+  registrationQrTokenBlock.hidden = true;
+  registrationQrToken.value = '';
+  copyRegistrationQrToken.textContent = '複製';
   registrationQrDialog.showModal();
 
   if (registrationQrObjectUrl) {
@@ -815,6 +914,11 @@ async function showRegistrationQr(registration) {
     registrationQrObjectUrl = URL.createObjectURL(await response.blob());
     registrationQrImage.src = registrationQrObjectUrl;
     registrationQrImage.hidden = false;
+    const token = response.headers.get('X-QR-Token');
+    if (token) {
+      registrationQrToken.value = token;
+      registrationQrTokenBlock.hidden = false;
+    }
     registrationQrMessage.textContent = '此 QR Code 僅對應你的這筆報名。';
   } catch (error) {
     registrationQrMessage.textContent = error.message;
@@ -908,6 +1012,7 @@ function editActivity(activity) {
   document.getElementById('activityFormTitle').textContent = '編輯活動草稿';
   document.getElementById('saveActivityButton').textContent = '儲存變更';
   document.getElementById('cancelEditButton').hidden = false;
+  setPage('draft');
   activityForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
@@ -940,7 +1045,8 @@ function renderAdminActivities() {
         draft: '草稿',
         approved: '已核准',
         rejected: '已拒絕',
-        published: '已發布'
+        published: '已發布',
+        archived: '已封存'
       }[activity.status] || activity.status)
     );
     card.append(header);
@@ -953,8 +1059,71 @@ function renderAdminActivities() {
       card.append(createElement('p', 'review-note', `審核意見：${activity.review_note}`));
     }
 
+    const staffPanel = createElement('div', 'activity-staff-panel');
+    staffPanel.append(createElement('strong', 'activity-staff-title', '簽到工作人員'));
+    const assigned = activityAssignments[activity.id] || [];
+    if (assigned.length) {
+      const staffList = createElement('div', 'activity-staff-list');
+      assigned.forEach((staff) => {
+        const staffRow = createElement('div', 'activity-staff-row');
+        staffRow.append(createElement(
+          'span',
+          '',
+          `${staff.display_name}（${staff.email}）`
+        ));
+        const removeButton = createElement('button', 'button button-outline admin-action', '移除');
+        removeButton.type = 'button';
+        removeButton.addEventListener('click', async () => {
+          try {
+            await removeActivityStaff(activity.id, staff.id);
+          } catch (error) {
+            setAdminMessage(error.message, true);
+          }
+        });
+        staffRow.append(removeButton);
+        staffList.append(staffRow);
+      });
+      staffPanel.append(staffList);
+    } else {
+      staffPanel.append(createElement('p', 'activity-staff-empty', '尚未指派工作人員。'));
+    }
+
+    const available = checkInStaff.filter(
+      (staff) => !assigned.some((item) => item.id === staff.id)
+    );
+    if (available.length) {
+      const assignRow = createElement('div', 'activity-staff-assignment');
+      const select = document.createElement('select');
+      select.append(new Option('請選擇簽到人員', ''));
+      available.forEach((staff) => {
+        select.append(new Option(`${staff.display_name}（${staff.email}）`, String(staff.id)));
+      });
+      const assignButton = createElement('button', 'button button-primary admin-action', '指派');
+      assignButton.type = 'button';
+      assignButton.addEventListener('click', async () => {
+        if (!select.value) {
+          setAdminMessage('請先選擇簽到人員。', true);
+          return;
+        }
+        try {
+          await assignActivityStaff(activity.id, Number(select.value));
+        } catch (error) {
+          setAdminMessage(error.message, true);
+        }
+      });
+      assignRow.append(select, assignButton);
+      staffPanel.append(assignRow);
+    } else if (checkInStaff.length === 0) {
+      staffPanel.append(createElement(
+        'p',
+        'activity-staff-empty',
+        '目前沒有簽到人員帳號。請先用帳號管理建立 checkin 角色。'
+      ));
+    }
+    card.append(staffPanel);
+
     const actions = createElement('div', 'admin-card-actions');
-    if (activity.status !== 'published') {
+    if (!['published', 'archived'].includes(activity.status)) {
       actions.append(
         createAdminAction('編輯', 'edit', activity),
         createAdminAction('廢棄', 'discard', activity)
@@ -965,6 +1134,9 @@ function renderAdminActivities() {
         createAdminAction('核准', 'approve', activity),
         createAdminAction('拒絕', 'reject', activity)
       );
+    }
+    if (activity.status === 'published') {
+      actions.append(createAdminAction('封存下架', 'archive', activity));
     }
     if (activity.status === 'approved') {
       actions.append(createAdminAction('發布活動', 'publish', activity));
@@ -978,10 +1150,56 @@ function renderAdminActivities() {
 async function loadAdminActivities() {
   try {
     adminActivities = await apiRequest('admin/activities');
+    await Promise.all([
+      loadCheckInStaff(),
+      ...adminActivities.map((activity) => loadActivityStaff(activity.id))
+    ]);
     renderAdminActivities();
   } catch (error) {
     setAdminMessage(error.message, true);
   }
+}
+
+async function loadCheckInActivities() {
+  if (!['admin', 'checkin'].includes(currentUser?.role)) {
+    checkInActivities = [];
+  } else {
+    try {
+      checkInActivities = await apiRequest('check-in/activities');
+    } catch (error) {
+      checkInActivities = [];
+    }
+  }
+  updateCheckInActivityOptions();
+}
+
+async function loadCheckInStaff() {
+  checkInStaff = await apiRequest('admin/check-in-staff');
+}
+
+async function loadActivityStaff(activityId) {
+  activityAssignments[activityId] = await apiRequest(
+    `admin/activities/${activityId}/staff`
+  );
+}
+
+async function assignActivityStaff(activityId, userId) {
+  await apiRequest(`admin/activities/${activityId}/staff`, {
+    method: 'POST',
+    body: JSON.stringify({ user_id: userId })
+  });
+  await loadActivityStaff(activityId);
+  renderAdminActivities();
+  setAdminMessage('工作人員已指派。');
+}
+
+async function removeActivityStaff(activityId, userId) {
+  await apiRequest(`admin/activities/${activityId}/staff/${userId}`, {
+    method: 'DELETE'
+  });
+  await loadActivityStaff(activityId);
+  renderAdminActivities();
+  setAdminMessage('已取消工作人員指派。');
 }
 
 function renderActivityStatistics() {
@@ -1048,7 +1266,8 @@ async function loadActivityStatistics() {
     activityStatistics.forEach((item) => {
       statisticsActivitySelect.add(new Option(
         `${item.title} · ${{
-          draft: '草稿', approved: '已核准', rejected: '已拒絕', published: '已發布'
+          draft: '草稿', approved: '已核准', rejected: '已拒絕',
+          published: '已發布', archived: '已封存'
         }[item.status] || item.status}`,
         String(item.activity_id)
       ));
@@ -1072,6 +1291,9 @@ async function handleAdminAction(action, activity) {
       return;
     }
     if (action === 'discard' && !window.confirm(`確定廢棄「${activity.title}」？`)) return;
+    if (action === 'archive' && !window.confirm(
+      `確定封存「${activity.title}」？活動將從公開列表下架，但報名與簽到紀錄會保留。`
+    )) return;
     let path = `admin/activities/${activity.id}`;
     let options = { method: 'DELETE' };
     if (action === 'approve' || action === 'reject') {
@@ -1087,9 +1309,14 @@ async function handleAdminAction(action, activity) {
     } else if (action === 'publish') {
       path += '/publish';
       options = { method: 'POST' };
+    } else if (action === 'archive') {
+      path += '/archive';
+      options = { method: 'POST' };
     }
     await apiRequest(path, options);
-    setAdminMessage('活動狀態已更新。');
+    setAdminMessage(action === 'archive'
+      ? '活動已封存下架，報名與簽到紀錄已保留。'
+      : '活動狀態已更新。');
     await Promise.all([loadAdminActivities(), loadActivities(), loadActivityStatistics()]);
   } catch (error) {
     setAdminMessage(error.message, true);
@@ -1104,13 +1331,17 @@ async function loadAdminAccess() {
       await loadMyRegistrations();
       return;
     }
-    if (user.role === 'checkin') return;
+    if (user.role === 'checkin') {
+      await loadCheckInActivities();
+      return;
+    }
     if (user.role !== 'admin') return;
     adminNav.hidden = false;
-    adminPanel.hidden = false;
+    adminDraftNav.hidden = false;
     await Promise.all([
       loadAdminActivities(),
-      loadActivityStatistics()
+      loadActivityStatistics(),
+      loadCheckInActivities()
     ]);
   } catch (error) {
     setCurrentUser(null);
@@ -1121,8 +1352,43 @@ async function loadAdminAccess() {
 }
 
 activitySearch.addEventListener('input', renderActivities);
+sidebarToggle.addEventListener('click', () => {
+  setSidebarOpen(sidebarToggle.getAttribute('aria-expanded') !== 'true');
+});
+sidebarClose.addEventListener('click', () => setSidebarOpen(false, true));
+sidebarBackdrop.addEventListener('click', () => setSidebarOpen(false, true));
+sidebar.addEventListener('click', (event) => {
+  if (event.target.closest('.nav-link')) setSidebarOpen(false, true);
+});
+document.addEventListener('keydown', (event) => {
+  if (!sidebar.classList.contains('is-open')) return;
+  if (event.key === 'Escape') {
+    setSidebarOpen(false, true);
+    return;
+  }
+  if (event.key === 'Tab') {
+    const focusableItems = [...sidebar.querySelectorAll('button:not([disabled]):not([hidden])')];
+    const firstItem = focusableItems[0];
+    const lastItem = focusableItems[focusableItems.length - 1];
+    if (event.shiftKey && document.activeElement === firstItem) {
+      event.preventDefault();
+      lastItem.focus();
+    } else if (!event.shiftKey && document.activeElement === lastItem) {
+      event.preventDefault();
+      firstItem.focus();
+    }
+  }
+});
+window.addEventListener('resize', () => {
+  if (window.innerWidth >= 800 && sidebar.classList.contains('is-open')) {
+    setSidebarOpen(false);
+  }
+});
 document.querySelectorAll('.nav-link[data-category]').forEach((button) => {
-  button.addEventListener('click', () => setCategory(button.dataset.category));
+  button.addEventListener('click', () => {
+    setPage('overview');
+    setCategory(button.dataset.category);
+  });
 });
 document.getElementById('resetFilters').addEventListener('click', () => {
   activitySearch.value = '';
@@ -1132,16 +1398,22 @@ document.getElementById('retryLoad').addEventListener('click', loadActivities);
 document.getElementById('cancelEditButton').addEventListener('click', resetActivityForm);
 document.getElementById('adminStatusFilter').addEventListener('change', renderAdminActivities);
 statisticsActivitySelect.addEventListener('change', renderActivityStatistics);
+document.querySelector('.brand').addEventListener('click', (event) => {
+  event.preventDefault();
+  setPage('overview');
+  setCategory('all');
+});
 accountForm.addEventListener('submit', submitAccountForm);
 authModeToggle.addEventListener('click', () => {
   setAuthMode(authMode === 'login' ? 'register' : 'login');
 });
 logoutButton.addEventListener('click', logout);
 document.querySelector('[data-open-admin]').addEventListener('click', () => {
-  adminPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  setPage('admin');
 });
+adminDraftNav.addEventListener('click', () => setPage('draft'));
 checkInNav.addEventListener('click', () => {
-  checkInPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  setPage('checkin');
 });
 checkInSearchForm.addEventListener('submit', searchCheckInRegistrations);
 checkInTokenForm.addEventListener('submit', async (event) => {
@@ -1153,6 +1425,19 @@ checkInTokenForm.addEventListener('submit', async (event) => {
   }
   await lookupCheckInQr(token);
 });
+copyRegistrationQrToken.addEventListener('click', async () => {
+  if (!registrationQrToken.value) return;
+  try {
+    await navigator.clipboard.writeText(registrationQrToken.value);
+  } catch (error) {
+    registrationQrToken.select();
+    document.execCommand('copy');
+  }
+  copyRegistrationQrToken.textContent = '已複製';
+  window.setTimeout(() => {
+    copyRegistrationQrToken.textContent = '複製';
+  }, 1500);
+});
 startQrScannerButton.addEventListener('click', startQrScanner);
 stopQrScannerButton.addEventListener('click', stopQrScanner);
 myRegistrationsNav.addEventListener('click', async () => {
@@ -1160,7 +1445,7 @@ myRegistrationsNav.addEventListener('click', async () => {
     loginDialog.showModal();
     return;
   }
-  myRegistrationsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  setPage('registrations');
   await loadMyRegistrations();
 });
 loginDialog.addEventListener('close', () => {
@@ -1218,4 +1503,5 @@ document.addEventListener('keydown', (event) => {
 
 bindDialogControls();
 setAuthMode('login');
+setPage('overview');
 Promise.all([loadActivities(), loadAdminAccess()]);

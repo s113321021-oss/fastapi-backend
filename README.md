@@ -1,111 +1,56 @@
 # 校園活動管理系統
 
-本專案提供校園活動瀏覽、學生註冊與登入、活動審核發布、活動報名及現場 QR Code 簽到功能，並附有響應式網頁介面。
+以 FastAPI、PostgreSQL 與原生前端 JavaScript 建立的校園活動管理系統。系統提供活動瀏覽、學生報名、管理員審核與發布、現場簽到，以及個人報名 QR Code。
 
-## 專案簡介
+前端採 responsive mobile-first 設計，FastAPI 同時提供靜態頁面與 API。正式資料來源是 PostgreSQL，`app/static/data/activities.json` 不再作為公開活動資料來源。
 
-本專案包含以下主要模組：
+## 主要功能
 
-- app
-  - 應用程式入口
-- routers
-  - API 路由與端點
-- core
-  - 資料庫連線、資料表初始化與共用邏輯
-- models
-  - Pydantic 請求／回應模型與列舉定義
-
-## 校園活動首頁
-
-首頁採 mobile-first 響應式版面，包含活動導覽、分類篩選、關鍵字搜尋、活動卡片與詳情視窗。活動由資料庫 API 提供；學生及未登入訪客只能讀取已發布活動，管理員登入後可在首頁使用活動管理區。`app/static/data/activities.json` 僅保留為舊版展示資料，不會作為公開活動資料來源。
-
-活動支援分類、主辦單位、活動起訖時間、報名起訖時間、地點、描述及最大名額。活動資料由管理員手動建立與維護。
-
-## 使用者與權限 API
-
-登入採本系統帳號與密碼，不串接校內 SSO、不寄送驗證信，也不讀取郵件內容。學生註冊僅接受 `s學號@ncnu.edu.tw` 格式，建立後預設為 `student`；這只檢查信箱格式，不能證明帳號屬於本人或仍具在學資格。管理員與簽到人員不可自行註冊，須由管理員建立或更新角色。密碼以 Argon2id 雜湊儲存，最低長度為 12 字元。
-
-首次啟用時，先建立資料庫並以受信任的資料庫管理工具新增至少一名管理員到 `users`。舊版 `external_subject` 欄位會保留為 nullable 相容欄位；帳號以正規化 email 對應。產生初始密碼雜湊（密碼由 getpass 隱藏輸入）：
-
-```powershell
-.\venv\Scripts\python.exe -c "from getpass import getpass; from app.core.password_auth import hash_password; print(hash_password(getpass('Initial password: ')))"
-```
-
-把輸出的 Argon2id 雜湊填入下方 SQL。管理員登入後可用 `POST /api/admin/users` 建立或更新帳號及角色，新增帳號時需提供至少 12 字元的初始密碼。學生忘記密碼時，目前沒有自助重設或重設郵件功能，請聯絡系統管理員，透過此 API 為帳號設定新密碼。應用程式啟動時會初始化使用者、活動、報名與 session 資料表。
-
-初始管理員資料列範例（替換信箱與產生的 Argon2id 雜湊）：
-
-```sql
-INSERT INTO users (email, display_name, role, password_hash)
-VALUES ('admin@ncnu.edu.tw', '系統管理員', 'admin', '<argon2id-hash>')
-ON CONFLICT (lower(email))
-DO UPDATE SET display_name = EXCLUDED.display_name,
-              role = EXCLUDED.role,
-              password_hash = EXCLUDED.password_hash;
-```
-
-角色為 `admin`（管理員）、`student`（學生）及 `checkin`（現場簽到人員）。權限路由如下：
-
-| 操作 | API |
-| --- | --- |
-| 建立學生帳號 | `POST /api/auth/register` |
-| 信箱/密碼登入 | `POST /api/auth/login` |
-| 查看登入使用者 | `GET /api/auth/me` |
-| 登出並撤銷 session | `POST /api/auth/logout` |
-| 瀏覽已發布活動 | `GET /api/activities`、`GET /api/activities/{activity_id}` |
-| 學生報名及查看自己的紀錄 | `POST /api/activities/{activity_id}/registrations`、`GET /api/registrations/me` |
-| 學生查看單筆專屬 QR Code | `GET /api/registrations/me/{registration_id}/qr`（回傳 SVG） |
-| 管理使用者、建立/編輯/廢棄草稿、審核/發布活動、查看統計 | `/api/admin/...` |
-| 管理員/簽到人員搜尋報名（姓名、信箱或 Registration ID） | `GET /api/check-in/registrations?activity_id={id}&search={query}` |
-| 管理員/簽到人員以 QR token 查詢 | `POST /api/check-in/qr/lookup`，body 包含 `token` 與 `activity_id` |
-| 管理員/簽到人員核對後確認簽到 | `POST /api/check-in/registrations/{registration_id}/confirm` |
-| 管理員查看報名、簽到、未簽到、剩餘名額與簽到率 | `GET /api/admin/activities/statistics` |
-| 簽到人員以 QR token 查詢報名 | `POST /api/check-in/qr/lookup` |
-
-活動狀態流程為「草稿 → 核准 → 發布」；已拒絕的活動可編輯後重新送審或廢棄。任何未發布活動皆可編輯或廢棄，編輯會將狀態重設為草稿並清除舊審核意見；發布後不可透過管理 API 直接修改。拒絕時必須提供審核意見；公開列表、詳情及報名只會使用已發布活動。報名會同時檢查截止時間、名額與重複報名。
-
-個人報名與 QR API 僅接受 `student` session，查詢以登入者的 user ID 限定。QR 內容是以 `SECRET_KEY` 簽署的不可偽造 token，資料庫只保存 token 雜湊；只有本人可取得 QR SVG，管理員或簽到人員可用 `/api/check-in/qr/lookup` 解析。QR 僅供報名查找，現場仍須核對本人與校園照片證件；簽到更新採單次原子操作並記錄時間及操作人員。
-
-現場相機掃碼使用瀏覽器 `BarcodeDetector`，需支援 QR 格式並在 HTTPS 或 localhost 安全來源執行、允許相機權限；不支援的瀏覽器可貼上 QR token 查詢。報名搜尋可輸入姓名、校內信箱或 Registration ID。簽到結果若已由其他工作人員更新，前端會重新查詢實際簽到狀態。
-
-請將 `SECRET_KEY` 換成唯一、至少 32 字元的隨機值；範例佔位值會被登入模組拒絕。正式環境使用 HTTPS，並將 `SESSION_COOKIE_SECURE=True`；登入 session 為資料庫管理的 HttpOnly/SameSite cookie，最長 14 天，登出時立即撤銷。系統只驗證所輸入帳號密碼，不連線學校 Webmail，也不使用校內 SSO 密碼。
+- 活動分類、關鍵字搜尋、活動詳情與報名人數瀏覽
+- 學生帳號註冊、登入、登出及個人報名紀錄
+- 管理員建立、編輯、審核、發布、封存活動
+- 草稿、核准、拒絕、發布、封存等活動狀態流程
+- 管理員指派與撤銷現場簽到人員
+- 報名 QR Code、QR token 查詢與原子化簽到確認
+- 報名統計，包括報名、簽到、未簽到、剩餘名額與簽到率
+- 完整的 session、登入嘗試及密碼雜湊處理
 
 ## 技術棧
 
 - Python 3.11+
-- FastAPI
-- Uvicorn
+- FastAPI、Uvicorn
 - Pydantic
-- PostgreSQL（唯一支援的資料庫）
-- psycopg 3（PostgreSQL 驅動；資料存取使用 SQL）
-- dotenv / Python 環境變數管理
+- PostgreSQL
+- psycopg 3 binary driver
+- Argon2 password hashing
+- segno QR Code 產生
+- python-dotenv
+- 原生 HTML、CSS 與 JavaScript
 
-本專案使用 PostgreSQL 專用 SQL 與資料型別，不支援 SQLite，也未使用 SQLAlchemy ORM。
-路由集中於 `app/routers/`；資料驗證模型集中於 `app/models/main.py`；PostgreSQL 連線與資料表初始化由 `app/core/db.py` 管理。
+本專案使用 PostgreSQL 專用 SQL，不支援 SQLite，也未使用 SQLAlchemy ORM。
 
 ## 專案結構
 
 ```text
 fastapi-backend/
 ├── app/
-│   ├── main.py
 │   ├── core/
-│   │   ├── db.py
-│   │   ├── password_auth.py
-│   │   └── registration_qr.py
+│   │   ├── db.py                 # PostgreSQL 連線與資料表初始化
+│   │   ├── password_auth.py      # 密碼雜湊、session 與權限驗證
+│   │   └── registration_qr.py    # 報名 QR token 與 SVG
 │   ├── models/
-│   │   └── main.py
+│   │   └── main.py               # Pydantic 請求及回應模型
 │   ├── routers/
-│   │   ├── auth.py
-│   │   ├── notes.py
-│   │   ├── system.py
-│   │   └── user_access.py
-│   └── static/
-│       ├── assets/
-│       │   ├── css/style.css
-│       │   └── js/app.js
-│       ├── data/activities.json
-│       └── index.html
+│   │   ├── auth.py               # 註冊、登入、登出
+│   │   ├── notes.py              # Notes CRUD 範例 API
+│   │   ├── system.py             # health、version
+│   │   └── user_access.py        # 活動、報名、管理與簽到 API
+│   ├── static/
+│   │   ├── assets/css/style.css
+│   │   ├── assets/js/app.js
+│   │   ├── data/activities.json
+│   │   └── index.html
+│   └── main.py                   # FastAPI app、靜態檔案與啟動初始化
 ├── tests/
 │   ├── test_activity_model.py
 │   ├── test_api_integration.py
@@ -113,24 +58,25 @@ fastapi-backend/
 │   ├── test_password_auth.py
 │   └── test_registration_qr.py
 ├── .env.example
-├── .gitignore
 ├── README.md
 ├── requirements.txt
 └── run.bat
 ```
 
+啟動時會自動建立或補齊所需資料表，包括使用者、session、登入嘗試、活動、報名、活動人員及備註資料表。
+
 ## 安裝與啟動
 
 ### 1. 建立虛擬環境
 
-Windows:
+Windows：
 
 ```powershell
 python -m venv venv
 .\venv\Scripts\Activate.ps1
 ```
 
-Linux / macOS:
+Linux / macOS：
 
 ```bash
 python3 -m venv venv
@@ -145,120 +91,170 @@ pip install -r requirements.txt
 
 ### 3. 設定環境變數
 
-複製範例檔：
+複製範例設定：
 
-```bash
-copy .env.example .env
+```powershell
+Copy-Item .env.example .env
 ```
 
-或 Linux / macOS：
+Linux / macOS：
 
 ```bash
 cp .env.example .env
 ```
 
-請設定 PostgreSQL 連線字串與足夠隨機且至少 32 字元的 `SECRET_KEY`。範例值僅供本機開發，不可用於正式環境。主要設定如下：
+主要設定：
 
 ```env
 DATABASE_URL=postgresql://username:password@localhost:5432/fastapi_db
 SECRET_KEY=replace-with-a-unique-random-secret-at-least-32-characters
 ROOT_PATH=/s113321021
 SESSION_COOKIE_SECURE=False
+CORS_ORIGINS=["http://localhost:3000"]
 ```
 
-`CORS_ORIGINS` 可設定允許的前端來源；正式環境使用 HTTPS 時，請將 `SESSION_COOKIE_SECURE=True`。若部署於反向代理底下，請讓 `ROOT_PATH` 與實際網址前綴完全一致。
+可從 `.env.example` 開始設定。`DATABASE_URL` 未設定時，應用程式仍可啟動，但需要資料庫時會回報錯誤且不會執行資料表初始化。
+
+`SECRET_KEY` 必須是唯一且至少 32 字元的隨機值；範例佔位值會被登入與 QR 模組拒絕。正式環境應使用 HTTPS 並設定 `SESSION_COOKIE_SECURE=True`。`ROOT_PATH` 必須與反向代理公開前綴一致。
 
 ### 4. 啟動開發伺服器
 
-本機開發：
+使用預設子路徑：
 
-```bash
-uvicorn app.main:app --host 0.0.0.0 --port 7777 --reload
-```
-
-帶前綴部署：
-
-```bash
+```powershell
 uvicorn app.main:app --host 0.0.0.0 --port 7777 --root-path /s113321021 --reload
 ```
 
-啟動後，預設 API 文件可在以下位置查看：
+也可直接執行 Windows 腳本：
 
-- Swagger UI: http://localhost:7777/docs
-- ReDoc: http://localhost:7777/redoc
-
-若使用反向代理，請務必保持路徑前綴與 `ROOT_PATH` 一致，例如：
-
-- https://demo.wke.csie.ncnu.edu.tw/s113321021/docs
-- https://demo.wke.csie.ncnu.edu.tw/s113321021/openapi.json
-
-## 常用命令
-
-### 啟動服務
-
-```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```powershell
+.\run.bat
 ```
 
-### 安裝新依賴
+不使用子路徑時：
 
-```bash
-pip install package-name
+```powershell
+uvicorn app.main:app --host 0.0.0.0 --port 7777 --reload
 ```
 
-### 儲存依賴列表
+啟動後可查看：
 
-```bash
-pip freeze > requirements.txt
+- 首頁：`http://localhost:7777/s113321021/`
+- Swagger UI：`http://localhost:7777/s113321021/docs`
+- ReDoc：`http://localhost:7777/s113321021/redoc`
+- OpenAPI：`http://localhost:7777/s113321021/openapi.json`
+
+使用根目錄啟動時，將上述網址中的 `/s113321021` 移除。
+
+## 帳號與權限
+
+系統支援三種角色：
+
+| 角色 | 權限 |
+| --- | --- |
+| `student` | 註冊學生帳號、瀏覽已發布活動、報名及查看個人 QR |
+| `admin` | 管理使用者與活動、審核發布、指派簽到人員及查看統計 |
+| `checkin` | 搜尋報名、解析 QR token、確認現場簽到 |
+
+學生註冊只接受 `s學號@ncnu.edu.tw` 格式，建立後角色固定為 `student`。此檢查只驗證信箱格式，不代表已驗證學生身分或在學資格。管理員及簽到人員不可自行註冊，需由管理員建立或更新。
+
+密碼使用 Argon2id 儲存，註冊與管理員建立帳號時密碼最少為 12 字元。session 儲存在資料庫中，透過 HttpOnly、SameSite=Lax cookie 管理，預設最長 14 天，登出時立即撤銷。
+
+### 建立初始管理員
+
+先設定 `DATABASE_URL` 並啟動一次應用程式以初始化資料表。再產生 Argon2id 密碼雜湊：
+
+```powershell
+.\venv\Scripts\python.exe -c "from getpass import getpass; from app.core.password_auth import hash_password; print(hash_password(getpass('Initial password: ')))"
 ```
 
-### 執行測試
+將雜湊填入下列 SQL，透過受信任的資料庫管理工具執行：
 
-一般單元測試：
+```sql
+INSERT INTO users (email, display_name, role, password_hash)
+VALUES ('admin@ncnu.edu.tw', '系統管理員', 'admin', '<argon2id-hash>')
+ON CONFLICT (lower(email))
+DO UPDATE SET
+    display_name = EXCLUDED.display_name,
+    role = EXCLUDED.role,
+    password_hash = EXCLUDED.password_hash;
+```
+
+完成後可使用管理員 API 建立或更新其他帳號：
+
+```http
+POST /api/admin/users
+```
+
+學生忘記密碼時，目前沒有自助重設或重設郵件流程；管理員可透過上述管理 API 設定新密碼。
+
+## API 摘要
+
+系統 API 的公開前綴為 `/api`：
+
+| 操作 | 端點 |
+| --- | --- |
+| 系統健康與版本 | `GET /api/health`、`GET /api/version` |
+| 註冊、登入、登出、目前使用者 | `POST /api/auth/register`、`POST /api/auth/login`、`POST /api/auth/logout`、`GET /api/auth/me` |
+| 公開活動瀏覽 | `GET /api/activities`、`GET /api/activities/{activity_id}` |
+| 學生報名與個人紀錄 | `POST /api/activities/{activity_id}/registrations`、`GET /api/registrations/me` |
+| 個人專屬 QR | `GET /api/registrations/me/{registration_id}/qr` |
+| 管理使用者與活動 | `/api/admin/users`、`/api/admin/activities/...` |
+| 活動簽到人員 | `/api/admin/activities/{activity_id}/staff`、`/api/admin/check-in-staff` |
+| 現場簽到 | `GET /api/check-in/activities`、`GET /api/check-in/registrations`、`POST /api/check-in/qr/lookup`、`POST /api/check-in/registrations/{registration_id}/confirm` |
+| 活動統計 | `GET /api/admin/activities/statistics` |
+| Notes 範例 CRUD | `GET/POST/PUT/DELETE /api/notes` 或 `/api/note/{id}` |
+
+完整參數與請求／回應格式請查看 Swagger UI。
+
+## 活動與報名流程
+
+活動狀態為：
+
+```text
+draft -> approved -> published -> archived
+           |
+           +-> rejected -> （編輯後重新送審或廢棄）
+```
+
+- 草稿：可編輯或廢棄。
+- 核准：管理員審核通過。
+- 發布：公開活動列表可見，學生可在報名期限內報名。
+- 封存：從公開列表、詳情及報名功能下架，既有報名與簽到紀錄仍保留於統計中。
+- 拒絕：必須提供審核意見；編輯後會重設為草稿並清除舊審核意見。
+
+發布後不可透過管理 API 直接修改；封存不會刪除任何報名紀錄。報名時會檢查活動發布狀態、報名開放時間、截止時間、名額上限及重複報名。
+
+QR token 是以 `SECRET_KEY` 簽署的不可偽造 token，資料庫只保存雜湊。只有學生本人可取得自己的 QR SVG；管理員或簽到人員可透過 QR lookup 查詢報名。簽到仍須核對本人與校園證件，簽到更新採原子操作並記錄時間與操作人員。
+
+相機掃碼使用瀏覽器 `BarcodeDetector`，需要支援 QR 格式、相機權限，以及 HTTPS 或 localhost 安全來源。不支援相機掃碼的瀏覽器可貼上 QR token 查詢。
+
+## 環境變數
+
+| 變數 | 說明 |
+| --- | --- |
+| `DATABASE_URL` | PostgreSQL 連線字串 |
+| `TEST_DATABASE_URL` | 整合測試使用的可丟棄 PostgreSQL 資料庫 |
+| `SECRET_KEY` | 密碼相關簽名及 QR token secret，至少 32 字元 |
+| `ROOT_PATH` | 反向代理公開路徑前綴 |
+| `CORS_ORIGINS` | JSON 格式允許來源，例如 `["https://example.edu"]` |
+| `SESSION_COOKIE_SECURE` | HTTPS 正式環境設為 `True`；本機 HTTP 可設為 `False` |
+
+請勿將 `.env` 提交至版本控制。
+
+## 測試
+
+執行一般單元測試：
 
 ```powershell
 .\venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-登入／權限、活動審核發布、報名及簽到的 API 資料庫整合測試需要一個可丟棄的 PostgreSQL 測試資料庫。設定 `TEST_DATABASE_URL` 後再執行同一命令：
+API 整合測試需要可丟棄的 PostgreSQL 測試資料庫：
 
 ```powershell
 $env:TEST_DATABASE_URL = "postgresql://user:password@localhost:5432/fastapi_test"
 .\venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-整合測試只使用 `TEST_DATABASE_URL`，並在其中建立隨機名稱的隔離 schema；測試結束後會刪除該 schema，不會清空 `DATABASE_URL` 指向的應用程式資料庫。未設定 `TEST_DATABASE_URL` 時，整合測試會明確標記為略過。
-
-## 環境變數說明
-
-- `DATABASE_URL`：PostgreSQL 連線字串；未設定時不會在啟動時初始化資料庫。
-- `SECRET_KEY`：用於密碼驗證相關簽名及報名 QR token，需為唯一且至少 32 字元的隨機值。
-- `ROOT_PATH`：反向代理公開路徑前綴；本機根目錄部署可設為空字串。
-- `CORS_ORIGINS`：JSON 格式的允許來源清單，例如 `["https://example.edu"]`。
-- `SESSION_COOKIE_SECURE`：正式 HTTPS 環境應設為 `True`；本機 HTTP 開發可設為 `False`。
-
-## 開發規範
-
-- 不要將 `.env` 檔案提交到 GitHub
-- 請保留 `.env.example` 作為範本
-- 新增 API 時，建議保持路由與邏輯分離
-- 使用 Pydantic 模型做資料驗證
-- API 行為請對齊 RESTful 原則
-
-## 部署建議
-
-這個專案可部署於：
-
-- Render
-- Railway
-- Heroku
-- Docker + VPS
-- Azure App Service
-- AWS EC2 / ECS
-
-
-## 授權
-
-本專案目前未指定授權條款
-
-## 聯絡方式
+整合測試只使用 `TEST_DATABASE_URL`，並建立隨機名稱的隔離 schema；結束後刪除該 schema，不會清空 `DATABASE_URL` 指向的應用程式資料庫。未設定 `TEST_DATABASE_URL` 時，整合測試會被略過。
