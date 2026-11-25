@@ -12,10 +12,12 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 .pyright/
+.pytype/
 .pytest_cache/
 .hypothesis/
 .coverage
 .coverage.*
+coverage.json
 htmlcov/
 coverage.xml
 .cache/
@@ -52,6 +54,9 @@ pyvenv.cfg
 # pip / uv
 .uv/
 pip-wheel-metadata/
+pip-log.txt
+pip-delete-this-directory.txt
+__pypackages__/
 
 # Environment variables
 .env
@@ -81,8 +86,13 @@ log/
 # Local database / runtime files
 *.sqlite
 *.sqlite3
+*.sqlite-journal
+*.sqlite-shm
+*.sqlite-wal
 *.db
 *.db-journal
+*.db-shm
+*.db-wal
 *.pid
 tmp/
 temp/
