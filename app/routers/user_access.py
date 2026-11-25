@@ -1,8 +1,9 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from starlette.responses import Response as StarletteResponse
 
+from app.core.audit import record_audit_event
 from app.core.db import get_db_connection
 from app.core.password_auth import (
     get_authenticated_identity,
@@ -13,6 +14,7 @@ from app.core.password_auth import (
 from app.core.registration_qr import (
     create_registration_qr_token,
     hash_registration_qr_token,
+    registration_qr_expires_at,
     render_registration_qr,
 )
 from app.models.main import (
@@ -259,6 +261,7 @@ def read_my_registrations(user: User = Depends(require_student)) -> list[dict]:
 @router.get("/registrations/me/{registration_id}/qr")
 def read_my_registration_qr(
     registration_id: int,
+    request: Request,
     user: User = Depends(require_student),
 ) -> StarletteResponse:
     with get_db_connection() as conn:
@@ -272,19 +275,25 @@ def read_my_registration_qr(
                 raise HTTPException(status_code=404, detail="Registration not found.")
 
             try:
-                token = create_registration_qr_token(registration_id, user.id)
+                token = create_registration_qr_token()
+                expires_at = registration_qr_expires_at()
             except RuntimeError:
                 raise HTTPException(
                     status_code=503,
-                    detail="QR Code 服務尚未完成安全設定。",
+                    detail="QR Code service is not configured correctly.",
                 ) from None
             token_hash = hash_registration_qr_token(token)
             cur.execute(
-                "UPDATE registrations SET qr_token_hash = %s WHERE id = %s AND user_id = %s",
-                (token_hash, registration_id, user.id),
+                """
+                UPDATE registrations
+                SET qr_token_hash = %s, qr_token_expires_at = %s
+                WHERE id = %s AND user_id = %s
+                """,
+                (token_hash, expires_at, registration_id, user.id),
             )
         conn.commit()
 
+    record_audit_event(action="qr.issued", user_id=user.id, resource_type="registration", resource_id=registration_id, request=request)
     response = StarletteResponse(render_registration_qr(token), media_type="image/svg+xml")
     response.headers["Cache-Control"] = "private, no-store"
     response.headers["X-Content-Type-Options"] = "nosniff"
@@ -843,8 +852,10 @@ def find_registrations_for_check_in(
 @router.post("/check-in/qr/lookup")
 def find_registration_by_qr(
     payload: CheckInQrLookup,
+    request: Request,
     staff: User = Depends(require_check_in_staff),
 ) -> dict:
+    token_hash = hash_registration_qr_token(payload.token)
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             if staff.role is Role.CHECK_IN:
@@ -855,16 +866,18 @@ def find_registration_by_qr(
                     JOIN activity_staff AS s
                       ON s.activity_id = r.activity_id AND s.user_id = %s
                     WHERE r.qr_token_hash = %s
+                      AND r.qr_token_expires_at > CURRENT_TIMESTAMP
                       AND (%s::integer IS NULL OR r.activity_id = %s)
                     """,
                     (
                         staff.id,
-                        hash_registration_qr_token(payload.token),
+                        token_hash,
                         payload.activity_id,
                         payload.activity_id,
                     ),
                 )
                 if cur.fetchone() is None:
+                    record_audit_event(action="checkin.qr.lookup.denied", user_id=staff.id, resource_type="registration_qr", detail={"activity_id": payload.activity_id}, request=request)
                     raise HTTPException(status_code=403, detail="You are not assigned to this activity.")
             cur.execute(
                 """
@@ -874,17 +887,20 @@ def find_registration_by_qr(
                 JOIN activities AS a ON a.id = r.activity_id
                 JOIN users AS u ON u.id = r.user_id
                 WHERE r.qr_token_hash = %s
-                                      AND (%s::integer IS NULL OR a.id = %s)
+                  AND r.qr_token_expires_at > CURRENT_TIMESTAMP
+                  AND (%s::integer IS NULL OR a.id = %s)
                 """,
-                                (
-                                        hash_registration_qr_token(payload.token),
-                                        payload.activity_id,
-                                        payload.activity_id,
-                                ),
+                (
+                    token_hash,
+                    payload.activity_id,
+                    payload.activity_id,
+                ),
             )
             row = cur.fetchone()
     if row is None:
-        raise HTTPException(status_code=404, detail="QR Code not found.")
+        record_audit_event(action="checkin.qr.lookup.not_found", user_id=staff.id, resource_type="registration_qr", detail={"activity_id": payload.activity_id}, request=request)
+        raise HTTPException(status_code=404, detail="QR Code not found or expired.")
+    record_audit_event(action="checkin.qr.lookup.success", user_id=staff.id, resource_type="registration", resource_id=row[0], detail={"activity_id": row[1]}, request=request)
     return {
         "registration_id": row[0],
         "activity_id": row[1],
@@ -899,6 +915,7 @@ def find_registration_by_qr(
 @router.post("/check-in/registrations/{registration_id}/confirm")
 def confirm_check_in(
     registration_id: int,
+    request: Request,
     staff: User = Depends(require_check_in_staff),
 ) -> dict:
     with get_db_connection() as conn:
@@ -915,6 +932,7 @@ def confirm_check_in(
                     (staff.id, registration_id),
                 )
                 if cur.fetchone() is None:
+                    record_audit_event(action="checkin.confirm.denied", user_id=staff.id, resource_type="registration", resource_id=registration_id, request=request)
                     raise HTTPException(status_code=403, detail="You are not assigned to this activity.")
             cur.execute(
                 """
@@ -933,15 +951,18 @@ def confirm_check_in(
                 )
                 exists = cur.fetchone()
                 if exists is None:
+                    record_audit_event(action="checkin.confirm.not_found", user_id=staff.id, resource_type="registration", resource_id=registration_id, request=request)
                     raise HTTPException(
                         status_code=404,
                         detail="Registration not found.",
                     )
+                record_audit_event(action="checkin.confirm.duplicate", user_id=staff.id, resource_type="registration", resource_id=registration_id, request=request)
                 raise HTTPException(
                     status_code=409,
                     detail="This registration has already been checked in.",
                 )
             conn.commit()
+    record_audit_event(action="checkin.confirm.success", user_id=staff.id, resource_type="registration", resource_id=row[0], detail={"activity_id": row[1]}, request=request)
     return {
         "registration_id": row[0],
         "activity_id": row[1],

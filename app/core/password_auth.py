@@ -83,14 +83,18 @@ def get_authenticated_identity(request: Request) -> AuthenticatedIdentity:
     return AuthenticatedIdentity(email=row[0])
 
 
+def trust_proxy_headers() -> bool:
+    return os.getenv("TRUST_PROXY_HEADERS", "").strip().lower() in {"1", "true", "yes"}
+
+
 def session_cookie_options(request: Request) -> dict:
     root_path = os.getenv("ROOT_PATH", "").strip().rstrip("/") or "/"
     secure_setting = os.getenv("SESSION_COOKIE_SECURE", "").strip().lower()
     if secure_setting:
         secure_cookie = secure_setting in {"1", "true", "yes"}
     else:
-        forwarded_proto = request.headers.get("x-forwarded-proto", "").split(",", 1)[0].strip()
-        secure_cookie = request.url.scheme == "https" or forwarded_proto == "https"
+        secure_cookie = True
+
     return {
         "key": SESSION_COOKIE_NAME,
         "httponly": True,

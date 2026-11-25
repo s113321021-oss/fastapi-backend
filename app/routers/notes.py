@@ -1,13 +1,14 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.db import get_db_connection
-from app.models.main import NoteCreate
+from app.models.main import NoteCreate, User
+from app.routers.user_access import get_current_user
 
 router = APIRouter(prefix="/api")
 
 
 @router.get("/notes")
-def get_notes() -> list[dict]:
+def get_notes(_: User = Depends(get_current_user)) -> list[dict]:
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -27,7 +28,7 @@ def get_notes() -> list[dict]:
 
 
 @router.get("/note/{id}")
-def get_note(id: int) -> dict:
+def get_note(id: int, _: User = Depends(get_current_user)) -> dict:
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -48,7 +49,7 @@ def get_note(id: int) -> dict:
 
 
 @router.post("/note")
-def create_note(note: NoteCreate) -> dict:
+def create_note(note: NoteCreate, _: User = Depends(get_current_user)) -> dict:
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -68,7 +69,7 @@ def create_note(note: NoteCreate) -> dict:
 
 
 @router.put("/note/{id}")
-def update_note(id: int, note: NoteCreate) -> dict:
+def update_note(id: int, note: NoteCreate, _: User = Depends(get_current_user)) -> dict:
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -91,7 +92,7 @@ def update_note(id: int, note: NoteCreate) -> dict:
 
 
 @router.delete("/note/{id}")
-def delete_note(id: int) -> dict:
+def delete_note(id: int, _: User = Depends(get_current_user)) -> dict:
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("DELETE FROM notes WHERE id = %s RETURNING id", (id,))

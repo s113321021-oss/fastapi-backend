@@ -1,6 +1,7 @@
 import psycopg
 from fastapi import APIRouter, HTTPException, Request, Response
 
+from app.core.audit import record_audit_event
 from app.core.db import get_db_connection
 from app.core.password_auth import (
     SESSION_COOKIE_NAME,
@@ -107,9 +108,11 @@ def register_account(
             )
             user_row = cur.fetchone()
             if user_row is None:
+                record_audit_event(action="auth.register.duplicate", resource_type="user", detail={"email": email}, request=request)
                 raise HTTPException(status_code=409, detail="此信箱已有帳號，請直接登入。")
             conn.commit()
     _set_session(user_row[0], request, response)
+    record_audit_event(action="auth.register.success", user_id=user_row[0], resource_type="user", resource_id=user_row[0], detail={"email": email}, request=request)
     return dict(zip(("id", "email", "display_name", "role"), user_row))
 
 
@@ -140,23 +143,29 @@ def login(
 
     password_hash = user_row[4] if user_row else None
     if not verify_password(password_hash, payload.password):
+        record_audit_event(action="auth.login.failure", resource_type="user", detail={"email": email}, request=request)
         raise HTTPException(status_code=401, detail="信箱或密碼錯誤。")
 
     _set_session(user_row[0], request, response)
+    record_audit_event(action="auth.login.success", user_id=user_row[0], resource_type="user", resource_id=user_row[0], detail={"email": email}, request=request)
     return dict(zip(("id", "email", "display_name", "role"), user_row[:4]))
 
 
 @router.post("/logout", status_code=204)
 def logout(request: Request, response: Response) -> Response:
     token = request.cookies.get(SESSION_COOKIE_NAME)
+    user_id = None
     if token:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "UPDATE user_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE token_hash = %s",
+                    "UPDATE user_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE token_hash = %s RETURNING user_id",
                     (hash_token(token),),
                 )
+                row = cur.fetchone()
+                user_id = row[0] if row else None
                 conn.commit()
+    record_audit_event(action="auth.logout", user_id=user_id, resource_type="session", request=request)
     response.delete_cookie(**session_cookie_options(request))
     response.headers["Cache-Control"] = "no-store"
     response.status_code = 204

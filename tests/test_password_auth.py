@@ -48,7 +48,7 @@ class PasswordAuthTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 get_auth_secret()
 
-    def test_secure_cookie_is_enabled_for_https_or_forwarded_https(self):
+    def test_session_cookie_defaults_to_secure(self):
         request = Request(
             {
                 "type": "http",
@@ -59,17 +59,54 @@ class PasswordAuthTests(unittest.TestCase):
                 "path": "/",
                 "raw_path": b"/",
                 "query_string": b"",
-                "headers": [(b"x-forwarded-proto", b"https")],
+                "headers": [],
                 "client": ("127.0.0.1", 1234),
                 "server": ("localhost", 7777),
                 "root_path": "",
             }
         )
-        with patch.dict("os.environ", {"SESSION_COOKIE_SECURE": ""}, clear=False):
+        with patch.dict(
+            "os.environ",
+            {"SESSION_COOKIE_SECURE": "", "TRUST_PROXY_HEADERS": ""},
+            clear=False,
+        ):
             options = session_cookie_options(request)
         self.assertTrue(options["secure"])
         self.assertTrue(options["httponly"])
         self.assertEqual(options["samesite"], "lax")
+
+    def test_unset_session_cookie_secure_defaults_to_true(self):
+        request = Request(
+            {
+                "type": "http",
+                "asgi": {"version": "3.0", "spec_version": "2.3"},
+                "http_version": "1.1",
+                "method": "GET",
+                "scheme": "http",
+                "path": "/",
+                "raw_path": b"/",
+                "query_string": b"",
+                "headers": [(b"x-forwarded-proto", b"http")],
+                "client": ("127.0.0.1", 1234),
+                "server": ("localhost", 7777),
+                "root_path": "",
+            }
+        )
+        with patch.dict(
+            "os.environ",
+            {"SESSION_COOKIE_SECURE": "", "TRUST_PROXY_HEADERS": "true"},
+            clear=False,
+        ):
+            options = session_cookie_options(request)
+        self.assertTrue(options["secure"])
+
+        with patch.dict(
+            "os.environ",
+            {"SESSION_COOKIE_SECURE": "false", "TRUST_PROXY_HEADERS": "true"},
+            clear=False,
+        ):
+            options = session_cookie_options(request)
+        self.assertFalse(options["secure"])
 
 
 if __name__ == "__main__":

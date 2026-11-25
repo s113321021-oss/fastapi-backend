@@ -9,7 +9,6 @@ from fastapi.testclient import TestClient
 from psycopg import sql
 
 from app.core.password_auth import hash_password
-from app.core.registration_qr import create_registration_qr_token
 
 
 TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL")
@@ -34,6 +33,20 @@ class ApiDatabaseIntegrationTests(unittest.TestCase):
             },
         )
         cls.environment.start()
+
+        cls._original_testclient_request = TestClient.request
+
+        def _csrf_request(self, method, url, **kwargs):
+            if method.upper() in {"POST", "PUT", "DELETE", "PATCH"}:
+                headers = dict(kwargs.get("headers") or {})
+                if "x-csrf-token" not in {k.lower() for k in headers}:
+                    if not self.cookies.get("csrf_token"):
+                        cls._original_testclient_request(self, "GET", "/api/health")
+                    headers["X-CSRF-Token"] = self.cookies.get("csrf_token", "")
+                kwargs["headers"] = headers
+            return cls._original_testclient_request(self, method, url, **kwargs)
+
+        TestClient.request = _csrf_request
 
         with psycopg.connect(cls.database_url) as conn:
             conn.execute(
@@ -80,6 +93,8 @@ class ApiDatabaseIntegrationTests(unittest.TestCase):
                 )
                 conn.commit()
         finally:
+            if hasattr(cls, "_original_testclient_request"):
+                TestClient.request = cls._original_testclient_request
             cls.environment.stop()
 
     def setUp(self):
@@ -339,10 +354,8 @@ class ApiDatabaseIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(qr_response.status_code, 200, qr_response.text)
         self.assertEqual(qr_response.headers["content-type"], "image/svg+xml")
-        self.assertEqual(
-            qr_response.headers["x-qr-token"],
-            create_registration_qr_token(registration["id"], student["id"]),
-        )
+        qr_token = qr_response.headers["x-qr-token"]
+        self.assertRegex(qr_token, r"^[A-Za-z0-9_-]{43}$")
         self.assertIn(b"<svg", qr_response.content)
 
         second_user = admin_client.post(
@@ -402,27 +415,23 @@ class ApiDatabaseIntegrationTests(unittest.TestCase):
             200,
         )
 
-        registration_token = create_registration_qr_token(
-            registration["id"],
-            student["id"],
-        )
         lookup = checkin_client.post(
             "/api/check-in/qr/lookup",
-            json={"token": registration_token, "activity_id": activity_id},
+            json={"token": qr_token, "activity_id": activity_id},
         )
         self.assertEqual(lookup.status_code, 200, lookup.text)
         self.assertEqual(lookup.json()["registration_id"], registration["id"])
         self.assertEqual(
             admin_client.post(
                 "/api/check-in/qr/lookup",
-                json={"token": registration_token, "activity_id": activity_id},
+                json={"token": qr_token, "activity_id": activity_id},
             ).status_code,
             200,
         )
         self.assertEqual(
             self.client.post(
                 "/api/check-in/qr/lookup",
-                json={"token": registration_token, "activity_id": activity_id},
+                json={"token": qr_token, "activity_id": activity_id},
             ).status_code,
             403,
         )

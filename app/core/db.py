@@ -155,8 +155,15 @@ def initialize_tables(conn: psycopg.Connection) -> None:
             "ALTER TABLE registrations ADD COLUMN IF NOT EXISTS qr_token_hash CHAR(64)"
         )
         cur.execute(
+            "ALTER TABLE registrations ADD COLUMN IF NOT EXISTS qr_token_expires_at TIMESTAMPTZ"
+        )
+        cur.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS registrations_qr_token_hash_uq "
             "ON registrations (qr_token_hash) WHERE qr_token_hash IS NOT NULL"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS registrations_qr_token_expires_at_idx "
+            "ON registrations (qr_token_expires_at) WHERE qr_token_expires_at IS NOT NULL"
         )
         cur.execute(
             """
@@ -172,5 +179,26 @@ def initialize_tables(conn: psycopg.Connection) -> None:
         cur.execute(
             "CREATE INDEX IF NOT EXISTS activity_staff_user_idx "
             "ON activity_staff (user_id, activity_id)"
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS audit_logs (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                action VARCHAR(100) NOT NULL,
+                resource_type VARCHAR(100),
+                resource_id VARCHAR(100),
+                detail TEXT,
+                ip_address VARCHAR(64),
+                user_agent VARCHAR(512),
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS audit_logs_created_at_idx ON audit_logs (created_at DESC)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS audit_logs_action_idx ON audit_logs (action, created_at DESC)"
         )
     conn.commit()

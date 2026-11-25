@@ -162,12 +162,22 @@ function apiUrl(path) {
   return new URL(`api/${path}`, document.baseURI);
 }
 
+function getCookie(name) {
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length < 2) return '';
+  return parts.pop().split(';').shift() || '';
+}
+
 async function apiRequest(path, options = {}) {
+  const method = (options.method || 'GET').toUpperCase();
+  const csrfToken = getCookie('csrf_token');
   const response = await fetch(apiUrl(path), {
     credentials: 'same-origin',
     ...options,
     headers: {
       ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(csrfToken && !['GET', 'HEAD', 'OPTIONS'].includes(method) ? { 'X-CSRF-Token': csrfToken } : {}),
       ...options.headers
     }
   });

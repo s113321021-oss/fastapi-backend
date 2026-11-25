@@ -48,7 +48,6 @@ fastapi-backend/
 │   ├── static/
 │   │   ├── assets/css/style.css
 │   │   ├── assets/js/app.js
-│   │   ├── data/activities.json
 │   │   └── index.html
 │   └── main.py                   # FastAPI app、靜態檔案與啟動初始化
 ├── tests/
@@ -109,13 +108,15 @@ cp .env.example .env
 DATABASE_URL=postgresql://username:password@localhost:5432/fastapi_db
 SECRET_KEY=replace-with-a-unique-random-secret-at-least-32-characters
 ROOT_PATH=/s113321021
+TRUST_PROXY_HEADERS=False
+ENABLE_DOCS=True
 SESSION_COOKIE_SECURE=False
 CORS_ORIGINS=["http://localhost:3000"]
 ```
 
 可從 `.env.example` 開始設定。`DATABASE_URL` 未設定時，應用程式仍可啟動，但需要資料庫時會回報錯誤且不會執行資料表初始化。
 
-`SECRET_KEY` 必須是唯一且至少 32 字元的隨機值；範例佔位值會被登入與 QR 模組拒絕。正式環境應使用 HTTPS 並設定 `SESSION_COOKIE_SECURE=True`。`ROOT_PATH` 必須與反向代理公開前綴一致。
+`SECRET_KEY` 必須是唯一且至少 32 字元的隨機值；範例佔位值會被登入與 QR 模組拒絕。正式環境應使用 HTTPS 並設定 `SESSION_COOKIE_SECURE=True`。僅在受信任的反向代理後方才設定 `TRUST_PROXY_HEADERS=True`，讓應用程式信任 forwarded headers。`ENABLE_DOCS` 可設為 `False` 以關閉 `/docs`、`/redoc`、`/openapi.json`。`ROOT_PATH` 必須與反向代理公開前綴一致。
 
 ### 4. 啟動開發伺服器
 
@@ -234,11 +235,14 @@ QR token 是以 `SECRET_KEY` 簽署的不可偽造 token，資料庫只保存雜
 | 變數 | 說明 |
 | --- | --- |
 | `DATABASE_URL` | PostgreSQL 連線字串 |
-| `TEST_DATABASE_URL` | 整合測試使用的可丟棄 PostgreSQL 資料庫 |
+| `TEST_DATABASE_URL` | 整合測試使用的可丟棄 PostgreSQL 資料庫；未設定時整合測試會略過 |
 | `SECRET_KEY` | 密碼相關簽名及 QR token secret，至少 32 字元 |
-| `ROOT_PATH` | 反向代理公開路徑前綴 |
+| `ROOT_PATH` | 反向代理公開路徑前綴，例如 `/s113321021` |
+| `TRUST_PROXY_HEADERS` | 僅在受信任反向代理後方設為 `True`，才信任 `X-Forwarded-*` 標頭 |
+| `ENABLE_DOCS` | 是否啟用 `/docs`、`/redoc`、`/openapi.json`；正式環境可設為 `False` |
+| `SESSION_COOKIE_SECURE` | HTTPS 正式環境設為 `True`；本機 HTTP 開發可設為 `False` |
 | `CORS_ORIGINS` | JSON 格式允許來源，例如 `["https://example.edu"]` |
-| `SESSION_COOKIE_SECURE` | HTTPS 正式環境設為 `True`；本機 HTTP 可設為 `False` |
+| `REGISTRATION_QR_TTL_SECONDS` | 報名 QR token 有效秒數，預設 `600`，範圍 `30-86400` |
 
 請勿將 `.env` 提交至版本控制。
 

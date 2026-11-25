@@ -118,8 +118,8 @@ class ActivityReview(BaseModel):
 
 
 class NoteCreate(BaseModel):
-    title: str
-    content: str
+    title: str = Field(min_length=1, max_length=255)
+    content: str = Field(min_length=1, max_length=10000)
 
 
 class Note(NoteCreate):

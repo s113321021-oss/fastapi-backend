@@ -1,17 +1,35 @@
-import base64
 import hashlib
-import hmac
+import os
+import secrets
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
 
 import segno
 
-from app.core.password_auth import get_auth_secret
+
+DEFAULT_REGISTRATION_QR_TTL_SECONDS = 600
 
 
-def create_registration_qr_token(registration_id: int, user_id: int) -> str:
-    payload = f"registration-qr:v1:{registration_id}:{user_id}".encode("ascii")
-    signature = hmac.new(get_auth_secret(), payload, hashlib.sha256).digest()
-    return base64.urlsafe_b64encode(signature).rstrip(b"=").decode("ascii")
+def registration_qr_ttl_seconds() -> int:
+    raw = os.getenv("REGISTRATION_QR_TTL_SECONDS", "").strip()
+    if not raw:
+        return DEFAULT_REGISTRATION_QR_TTL_SECONDS
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise RuntimeError("REGISTRATION_QR_TTL_SECONDS must be an integer.") from exc
+    if value < 30 or value > 86400:
+        raise RuntimeError("REGISTRATION_QR_TTL_SECONDS must be between 30 and 86400.")
+    return value
+
+
+def create_registration_qr_token() -> str:
+    return secrets.token_urlsafe(32)
+
+
+def registration_qr_expires_at(now: datetime | None = None) -> datetime:
+    current = now or datetime.now(timezone.utc)
+    return current + timedelta(seconds=registration_qr_ttl_seconds())
 
 
 def hash_registration_qr_token(token: str) -> str:
